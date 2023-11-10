@@ -45,6 +45,9 @@ class MetabolicModelParser:
         self.metabolic_model = None
         self.load_metabolic_model()
         # ############################
+        self.s_matrix=None
+        self.b_vector=None
+        # ############################
         self.reactions_map = {}
         self.make_reactions_map()
         # ############################
@@ -61,6 +64,8 @@ class MetabolicModelParser:
         self.upper_bounds = {}
         self.fill_bounds()
         # ############################
+
+
 
     def load_metabolic_model(self) -> None:
         """
@@ -229,7 +234,7 @@ class MetabolicModelParser:
 
     def make_and_save_stoichiometric_data(self,
                                           folder_to_save: str,
-                                          use_fva: bool = False) -> None:
+                                          use_fva: bool = False,save_kernel_projector=False) -> None:
         """
         This method, makes A = S.diag(u-l) sparse matrix and b = Sl vector,
             and saves them.
@@ -255,9 +260,9 @@ class MetabolicModelParser:
         filepath_to_save_projector = os.path.join(folder_to_save, "projector.npy")
         # #################################################
         all_metabolites_ids = self.metabolites_map.values()
-        b_vector = dict(zip(all_metabolites_ids, [0]*len(all_metabolites_ids)))
+        self.b_vector = dict(zip(all_metabolites_ids, [0]*len(all_metabolites_ids)))
         a_info = []
-        s_matrix = np.zeros((len(all_metabolites_ids), len(self.reactions_map.keys())))
+        self.s_matrix = np.zeros((len(all_metabolites_ids), len(self.reactions_map.keys())))
         for _reaction in self.metabolic_model.reactions:
             _rxn_id = self.reactions_map[_reaction.id]
             _lb = self.lower_bounds[_rxn_id]
@@ -268,17 +273,19 @@ class MetabolicModelParser:
                 _met_id = self.metabolites_map[_metabolite.id]
                 a_text = _met_id + ',' + _rxn_id + ':\t' + str(_coeff * _diff_bound) + '\n'
                 a_info.append(a_text)
-                b_vector[_met_id] += _coeff * _lb
-                s_matrix[int(_met_id[1:]), int(_rxn_id[1:])] = _coeff  # Reading indexes from 'Mxxx' and 'Rxxx'
-        s_kernel = null_space(s_matrix)
-        kernel_projector = np.matmul(s_kernel, s_kernel.T)
+                self.b_vector[_met_id] += _coeff * _lb
+                self.s_matrix[int(_met_id[1:]), int(_rxn_id[1:])] = _coeff  # Reading indexes from 'Mxxx' and 'Rxxx'
+        s_kernel = null_space(self.s_matrix)
+        kernel_projector = np.matmul(s_kernel, s_kernel.T
+                                     )
         # ################## Saving #####################
+
         # A
         with open(filepath_to_save_a, 'w') as file:
             file.writelines(a_info)
         # b
         with open(filepath_to_save_b, 'w') as file:
-            for _met_id, _value in b_vector.items():
+            for _met_id, _value in self.b_vector.items():
                 saving_text = _met_id + ':\t' + str(_value) + '\n'
                 file.writelines([saving_text])
         # lb
@@ -301,7 +308,8 @@ def main():
     mmp = MetabolicModelParser(filepath_to_model="./Data/recon_2.2.xml")
     mmp.save_maps(folder_to_save='./Data')
     mmp.save_gene_free_reactions()
-    mmp.make_and_save_stoichiometric_data(folder_to_save='./Data', use_fva=False)
+    mmp.make_and_save_stoichiometric_data(folder_to_save='./Data', use_fva=False,save_kernel_projector=True)
+    
 
 if __name__ == "__main__":
     main()
