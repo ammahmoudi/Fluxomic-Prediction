@@ -15,9 +15,9 @@ from copy import deepcopy
 import scipy.io as spio
 import time
 
-from pypower.api import case57
-from pypower.api import opf, makeYbus
-from pypower import idx_bus, idx_gen, ppoption
+# from pypower.api import case57
+# from pypower.api import opf, makeYbus
+# from pypower import idx_bus, idx_gen, ppoption
 
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -86,7 +86,7 @@ class T2FProblem:
         self._device = None
 
     def __str__(self):
-        return 'T2FProblem-R{}-INEQ{}-EQ{}-E{}'.format(
+        return 'T2F-R{}-INEQ{}-EQ{}-E{}'.format(
             str(self.ydim), str(self.nineq), str(self.neq), str(self.num)
         )
 
@@ -219,13 +219,13 @@ class T2FProblem:
         resids=torch.cat([
             Y - self.Y_max,
             self.Y_min - Y
-                          ], dim=1)
+                          ], dim=0)
         return resids
     
     #have doubt about its correctness
     def ineq_dist(self, X, Y):
         resids = self.ineq_resid(X, Y)
-        return torch.clamp(resids, 0)
+        return torch.clamp(resids,min= 0)
     
     def eq_grad(self, X, Y):
         return 2*(Y@self.A.T - X)@self.A
@@ -233,7 +233,7 @@ class T2FProblem:
     #have doubt about its correctness
     def ineq_grad(self, X, Y):
         ineq_dist = self.ineq_dist(X, Y)
-        return 2*ineq_dist
+        return 2*torch.tensor([[1,0],[0,-1]])@ineq_dist
     
     #have doubt about its correctness
     def ineq_partial_grad(self, X, Y):
@@ -242,13 +242,16 @@ class T2FProblem:
         Y_max_effective = self.Y_max - (X @ self._A_other_inv.T)
         Y_min_effective =  (X @ self._A_other_inv.T)-self.Y_min
        
-        grad_max = 2 * torch.clamp(Y[:, self.partial_vars] - Y_max_effective, 0)
-        grad_min = 2 * torch.clamp(Y_min_effective - Y[:, self.partial_vars] , 0)
+        grad_partial_max = 2 * torch.clamp(Y[:, self.partial_vars] - Y_max_effective, 0)
+        grad_partial_min = 2 * torch.clamp(Y_min_effective - Y[:, self.partial_vars] , 0)
 
-        Y = torch.zeros(X.shape[0], self.ydim, device=self.device)
-        grad_full= grad_max+grad_min
-        Y[:, self.partial_vars] = grad_full
-        Y[:, self.other_vars] = - (grad_full @ self._A_partial.T) @ self._A_other_inv.T
+        Y = torch.zeros(2*X.shape[0], self.ydim, device=self.device)
+        grad_partial= torch.cat([grad_partial_max,grad_other_min])
+        grad_other_min= - (grad_partial_min @ self._A_partial.T) @ self._A_other_inv.T
+        grad_other_max= - (grad_partial_max @ self._A_partial.T) @ self._A_other_inv.T
+        grad_other= torch.cat([grad_other_max,grad_other_min])
+        Y[:, self.partial_vars] = grad_partial
+        Y[:, self.other_vars] = grad_other
        
         return Y
 
