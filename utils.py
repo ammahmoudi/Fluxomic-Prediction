@@ -4,20 +4,26 @@ from torch.autograd import Function
 torch.set_default_dtype(torch.float64)
 
 import numpy as np
-import osqp
-from qpth.qp import QPFunction
+# import osqp
+# from qpth.qp import QPFunction
 
-from scipy.linalg import svd
-from scipy.sparse import csc_matrix
+# from scipy.linalg import svd
+# from scipy.sparse import csc_matrix
 
 import hashlib
 from copy import deepcopy
-import scipy.io as spio
+# import scipy.io as spio
 import time
 
 # from pypower.api import case57
 # from pypower.api import opf, makeYbus
 # from pypower import idx_bus, idx_gen, ppoption
+
+#logging
+from loguru import logger
+import sys        # <!- add this line
+logger.remove(0)             # <- add this line
+logger.add(sys.stdout, level="TRACE")   # <- add this line
 
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -71,16 +77,22 @@ class T2FProblem:
 
         det = 0
         i = 0
-        while abs(det) < 0.0001 and i < 100:
+        max_i=1000
+        
+        while abs(det) < 0.0001 and i < max_i:
             self._partial_vars = np.random.choice(self._ydim, self._ydim - self._neq, replace=False)
             self._other_vars = np.setdiff1d( np.arange(self._ydim), self._partial_vars)
             det = torch.det(self._A[:, self._other_vars])
             i += 1
-        if i == 100:
+            logger.trace("i= "+str(i)+" | det(A_thers) = "+str(det))
+        if i == max_i:
+            logger.exception("i reached the maximum bound but the desired submatrix is not achieved.")
             raise Exception
         else:
             self._A_partial = self._A[:, self._partial_vars]
             self._A_other_inv = torch.inverse(self._A[:, self._other_vars])
+            
+            logger.success("A_partial and A_others constructed successfully at i= "+str(i)+" | det(A_thers) = "+str(det))
 
         ### For Pytorch
         self._device = None
