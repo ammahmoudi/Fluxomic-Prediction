@@ -12,8 +12,11 @@ data=Stoichiometry("./Data/A.txt","./Data/b.txt","./Data/lb.txt","./Data/ub.txt"
 
 A=data.get_a_matrix()
 X=data.get_b_vector()
+X=X.reshape((1,X.shape[0]))
 Y_min=data.get_lb()
+Y_min=Y_min.reshape((1,Y_min.shape[0]))
 Y_max=data.get_ub()
+Y_max=Y_max.reshape((1,Y_max.shape[0]))
 
 import os
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
