@@ -4,6 +4,10 @@ from torch.autograd import Function
 torch.set_default_dtype(torch.float64)
 
 import numpy as np
+import pyomo.environ as pyo
+# Import the solver
+from pyomo.opt import SolverFactory
+
 # import osqp
 # from qpth.qp import QPFunction
 
@@ -91,7 +95,7 @@ class T2FProblem:
         else:
             self._A_partial = self._A[:, self._partial_vars]
             self._A_other_inv = torch.inverse(self._A[:, self._other_vars])
-            
+
             logger.success("A_partial and A_others constructed successfully at i= "+str(i)+" | det(A_thers) = "+str(det))
 
         ### For Pytorch
@@ -277,8 +281,98 @@ class T2FProblem:
         Y[:, self.partial_vars] = Z
         Y[:, self.other_vars] = (X - Z @ self._A_partial.T) @ self._A_other_inv.T
         return Y
+    
+
+    # #ineq constraint
+    # def ineq_constraint(model):
+    #     return (model.Y_min,model.Y,model.Y_max)
+    
+    # #eq constraint
+    # def eq_constraint(model):
+    #     return model.Y.T@A==model.X
+    
     #need to be filled  suitable optimization solvers
-    def opt_solve(self, X, solver_type='osqp', tol=1e-4):
+    def opt_solve(self, X, solver_type='pyomo', tol=1e-4):
+        if solver_type == 'pyomo':
+            # model=pyo.AbstractModel()
+            # model.m=self._num_m
+            # model.r=self.num_r
+            # model.A=self.A
+            # model.X=X
+            # model.Y_min=self.Y_min
+            # model.Y_max=self.Y_max
+            # model.Y=pyo.Var()
+            # model.OBJ=pyo.Objective(rule=self.obj_fn)
+            # bound_constraints=pyo.Constraint()
+
+
+            # Define the data
+            # r = 3 # number of reactions
+            # m = 4 # number of metabolites
+            # A = np.array([[1, 0, -1], [-1, 1, 0], [0, -1, 1], [1, 1, 1]]) # matrix of size (m, r)
+            # X = np.array([1, 2, 3, 4]) # matrix of size (1, m)
+            # Y_min = np.array([0, 0, 0]) # matrix of size (1, r)
+            # Y_max = np.array([10, 10, 10]) # matrix of size (1, r)
+
+            # Create an abstract model
+            model = pyo.AbstractModel()
+
+            # Declare the sets
+            model.R = pyo.RangeSet(self._num_r) # set of reactions
+            model.M = pyo.RangeSet(self._num_m) # set of metabolites
+
+            # Declare the parameters
+            model.A = pyo.Param(model.M, model.R) # matrix A
+            model.X = pyo.Param(model.M) # matrix X
+            model.Y_min = pyo.Param(model.R) # matrix Y_min
+            model.Y_max = pyo.Param(model.R) # matrix Y_max
+
+            # Declare the variables
+            model.Y = pyo.Var(model.R, domain=pyo.Reals) # matrix Y
+
+            # Declare the objective function
+            def obj_rule(model):
+                return sum((model.Y[r] - 0)**2 for r in model.R) # minimize the second norm of Y
+            model.obj = pyo.Objective(rule=obj_rule)
+
+            # Declare the constraints
+            def balance_rule(model, m):
+                return sum(model.A[m, r] * model.Y[r] for r in model.R) == model.X[m] # Y @ A.T = X
+            model.balance =pyo.Constraint(model.M, rule=balance_rule)
+
+            def bound_rule(model, r):
+                return pyo.inequality(model.Y_min[r], model.Y[r], model.Y_max[r]) # Y_min < Y < Y_max
+            model.bound = pyo.Constraint(model.R, rule=bound_rule)
+
+        
+            solver = SolverFactory('glpk')
+
+            # Create a data dictionary
+            data = {
+                None: {
+                    'A': {None: self.A},
+                    'X': {None: self.X},
+                    'Y_min': {None: self.Y_min},
+                    'Y_max': {None: self.Y_max}
+                }
+            }
+
+            # Create an instance of the model with the data
+            instance = model.create_instance(data)
+
+            # Solve the instance
+
+            start_time = time.time()
+            results = solver.solve(instance)
+
+
+
+            end_time = time.time()
+
+            # sols = np.array(res.detach().cpu().numpy())
+            total_time = end_time - start_time
+            parallel_time = total_time
+
 
         # if solver_type == 'qpth':
         #     print('running qpth')
@@ -319,8 +413,7 @@ class T2FProblem:
         # else:
             # raise NotImplementedError
 
-        # return sols, total_time, parallel_time
-        pass
+        return results, total_time, parallel_time
 
     def calc_Y(self):
         Y = self.opt_solve(self.X)[0]
