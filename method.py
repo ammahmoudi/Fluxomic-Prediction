@@ -23,6 +23,12 @@ import argparse
 from utils import my_hash, str_to_bool
 import default_args
 
+#logging
+from loguru import logger
+import sys        # <!- add this line
+logger.remove(0)             # <- add this line
+logger.add(sys.stdout, level="TRACE")   # <- add this line
+
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 def main():
@@ -129,6 +135,7 @@ def main():
 
 
 def train_net(data, args, save_dir):
+    logger.trace("training...")
     solver_step = args['lr']
     nepochs = args['epochs']
     batch_size = args['batchSize']
@@ -175,13 +182,18 @@ def train_net(data, args, save_dir):
             train_time = time.time() - start_time
             dict_agg(epoch_stats, 'train_loss', train_loss.detach().cpu().numpy())
             dict_agg(epoch_stats, 'train_time', train_time, op='sum')
-
-        print(
+        logger.info(
             'Epoch {}: train loss {:.4f}, eval {:.4f}, dist {:.4f}, ineq max {:.4f}, ineq mean {:.4f}, ineq num viol {:.4f}, eq max {:.4f}, steps {}, time {:.4f}'.format(
                 i, np.mean(epoch_stats['train_loss']), np.mean(epoch_stats['valid_eval']),
                 np.mean(epoch_stats['valid_dist']), np.mean(epoch_stats['valid_ineq_max']),
                 np.mean(epoch_stats['valid_ineq_mean']), np.mean(epoch_stats['valid_ineq_num_viol_0']),
                 np.mean(epoch_stats['valid_eq_max']), np.mean(epoch_stats['valid_steps']), np.mean(epoch_stats['valid_time'])))
+        # print(
+        #     'Epoch {}: train loss {:.4f}, eval {:.4f}, dist {:.4f}, ineq max {:.4f}, ineq mean {:.4f}, ineq num viol {:.4f}, eq max {:.4f}, steps {}, time {:.4f}'.format(
+        #         i, np.mean(epoch_stats['train_loss']), np.mean(epoch_stats['valid_eval']),
+        #         np.mean(epoch_stats['valid_dist']), np.mean(epoch_stats['valid_ineq_max']),
+        #         np.mean(epoch_stats['valid_ineq_mean']), np.mean(epoch_stats['valid_ineq_num_viol_0']),
+        #         np.mean(epoch_stats['valid_eq_max']), np.mean(epoch_stats['valid_steps']), np.mean(epoch_stats['valid_time'])))
 
         if args['saveAllStats']:
             if i == 0:

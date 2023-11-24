@@ -27,7 +27,7 @@ import time
 from loguru import logger
 import sys        # <!- add this line
 logger.remove(0)             # <- add this line
-logger.add(sys.stdout, level="TRACE")   # <- add this line
+logger.add(sys.stdout, level="INFO")   # <- add this line
 
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -344,7 +344,7 @@ class T2FProblem:
                 return pyo.inequality(model.Y_min[r], model.Y[r], model.Y_max[r]) # Y_min < Y < Y_max
             model.bound = pyo.Constraint(model.R, rule=bound_rule)
 
-        
+            logger.trace("Strarting glpk solver...")
             solver = SolverFactory('glpk')
 
             # Create a data dictionary
