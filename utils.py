@@ -294,26 +294,7 @@ class T2FProblem:
     #need to be filled  suitable optimization solvers
     def opt_solve(self, X, solver_type='pyomo', tol=1e-4):
         if solver_type == 'pyomo':
-            # model=pyo.AbstractModel()
-            # model.m=self._num_m
-            # model.r=self.num_r
-            # model.A=self.A
-            # model.X=X
-            # model.Y_min=self.Y_min
-            # model.Y_max=self.Y_max
-            # model.Y=pyo.Var()
-            # model.OBJ=pyo.Objective(rule=self.obj_fn)
-            # bound_constraints=pyo.Constraint()
-
-
-            # Define the data
-            # r = 3 # number of reactions
-            # m = 4 # number of metabolites
-            # A = np.array([[1, 0, -1], [-1, 1, 0], [0, -1, 1], [1, 1, 1]]) # matrix of size (m, r)
-            # X = np.array([1, 2, 3, 4]) # matrix of size (1, m)
-            # Y_min = np.array([0, 0, 0]) # matrix of size (1, r)
-            # Y_max = np.array([10, 10, 10]) # matrix of size (1, r)
-
+            
             # Create an abstract model
             model = pyo.AbstractModel()
 
@@ -350,10 +331,10 @@ class T2FProblem:
             # Create a data dictionary
             data = {
                 None: {
-                    'A': {None: self.A},
-                    'X': {None: self.X},
-                    'Y_min': {None: self.Y_min},
-                    'Y_max': {None: self.Y_max}
+                    'A': {None: self.A_np},
+                    'X': {None: self.X_np},
+                    'Y_min': {None: self.Y_min_np},
+                    'Y_max': {None: self.Y_max_np}
                 }
             }
 
@@ -364,56 +345,12 @@ class T2FProblem:
 
             start_time = time.time()
             results = solver.solve(instance)
-
-
-
             end_time = time.time()
-
+            logger.success("pyomo solver finished.")
             # sols = np.array(res.detach().cpu().numpy())
             total_time = end_time - start_time
             parallel_time = total_time
-
-
-        # if solver_type == 'qpth':
-        #     print('running qpth')
-        #     start_time = time.time()
-        #     res = QPFunction(eps=tol, verbose=False)(self.Y_min, self.Y_max, self.A, X)
-        #     end_time = time.time()
-
-        #     sols = np.array(res.detach().cpu().numpy())
-        #     total_time = end_time - start_time
-        #     parallel_time = total_time
-        
-        # elif solver_type == 'osqp':
-        #     print('running osqp')
-        #     Y_min, Y_max, A = \
-        #         self.Y_min_np, self.Y_max_np, self.A_np
-        #     X_np = X.detach().cpu().numpy()
-        #     Y = []
-        #     total_time = 0
-        #     for Xi in X_np:
-        #         solver = osqp.OSQP()
-        #         my_A = np.vstack([A])
-        #         my_l = np.hstack([Xi, Y_min])
-        #         my_u = np.hstack([Xi, Y_max])
-        #         solver.setup(P=csc_matrix(Q), q=p, A=csc_matrix(my_A), l=my_l, u=my_u, verbose=False, eps_prim_inf=tol)
-        #         start_time = time.time()
-        #         results = solver.solve()
-        #         end_time = time.time()
-
-        #         total_time += (end_time - start_time)
-        #         if results.info.status == 'solved':
-        #             Y.append(results.x)
-        #         else:
-        #             Y.append(np.ones(self.ydim) * np.nan)
-
-        #     sols = np.array(Y)
-        #     parallel_time = total_time/len(X_np)
-
-        # else:
-            # raise NotImplementedError
-
-        return results, total_time, parallel_time
+            return results, total_time, parallel_time
 
     def calc_Y(self):
         Y = self.opt_solve(self.X)[0]
