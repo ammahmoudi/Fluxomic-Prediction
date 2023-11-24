@@ -78,25 +78,9 @@ class T2FProblem:
 
         
         #trying to find a non-zero determinant submatrix of A to solve in a unique way.
-
-        det = 0
-        i = 0
-        max_i=1000
+        self.find_square_submatrix(self.A)
+        print(self.partial_vars)
         
-        while abs(det) < 0.0001 and i < max_i:
-            self._partial_vars = np.random.choice(self._ydim, self._ydim - self._neq, replace=False)
-            self._other_vars = np.setdiff1d( np.arange(self._ydim), self._partial_vars)
-            det = torch.det(self._A[:, self._other_vars])
-            i += 1
-            logger.trace("i= "+str(i)+" | det(A_thers) = "+str(det))
-        if i == max_i:
-            logger.exception("i reached the maximum bound but the desired submatrix is not achieved.")
-            raise Exception
-        else:
-            self._A_partial = self._A[:, self._partial_vars]
-            self._A_other_inv = torch.inverse(self._A[:, self._other_vars])
-
-            logger.success("A_partial and A_others constructed successfully at i= "+str(i)+" | det(A_thers) = "+str(det))
 
         ### For Pytorch
         self._device = None
@@ -105,6 +89,96 @@ class T2FProblem:
         return 'T2F-R{}-INEQ{}-EQ{}-E{}'.format(
             str(self.ydim), str(self.nineq), str(self.neq), str(self.num)
         )
+    
+    def random_invertible_finder(self, matrix):
+        det = 0
+        i = 0
+        max_i=1000
+        
+        
+        while abs(det) < 0.0001 :
+            self._partial_vars = np.random.choice(self._ydim, self._ydim - self._neq, replace=False)
+            self._other_vars = np.setdiff1d( np.arange(self._ydim), self._partial_vars)
+            det = torch.det(self._A[:, self._other_vars])
+            i += 1
+            logger.trace("i= "+str(i)+" | det(A_thers) = "+str(det))
+        # if i == max_i:
+            # raise Exception
+        # else:
+
+            if abs(det)>0.0001:
+                self._A_partial = self._A[:, self._partial_vars]
+                self._A_other_inv = torch.inverse(self._A[:, self._other_vars])
+                self._A_other=self._A[:,self._other_vars]
+                logger.success("A_partial and A_others constructed successfully at i= "+str(i)+" | det(A_thers) = "+str(det))
+                print(self._partial_vars)
+                break
+
+        else:
+            logger.exception("i reached the maximum bound but the desired submatrix is not achieved.")
+        
+        
+
+
+            
+    
+    def is_independent (self, col, selected, matrix):
+    # This function checks if a column is linearly independent of a list of selected columns
+    # If the selected list is empty, then the column is independent by default
+        if not selected:
+            logger.trace("selected matrix is empty and independent by default.")
+            return True
+        # Otherwise, we form a matrix by appending the column to the selected columns
+        submatrix = torch.cat ([matrix [:, selected], col.unsqueeze (1)], dim=1)
+        # We compute the rank of the submatrix using PyTorch's matrix_rank function
+        rank = torch.linalg.matrix_rank (submatrix)
+        # If the rank is equal to the number of selected columns plus one, then the column is independent
+        # Otherwise, it is dependent
+        result=rank == len (selected) + 1
+        if result:
+             logger.trace("selected matrix is independent")
+        else:
+            logger.trace("selected matrix is  not independent")
+
+        
+        return result
+
+
+    def find_square_submatrix (self, matrix):
+        # Get the number of rows and columns of the matrix
+        rows, cols = matrix.size()
+        # Initialize an empty list to store the indices of the selected columns
+        selected = []
+        self._partial_vars=[]
+        self._other_vars=[]
+        # self._partial_vars = np.random.choice(self._ydim, self._ydim - self._neq, replace=False)
+        # self._other_vars = np.setdiff1d( np.arange(self._ydim), self._partial_vars)
+        
+        # Loop through the columns of the matrix
+        for i in range (cols):
+            # Get the current column
+            col = matrix [:, i]
+            # Check if the current column is linearly independent of the selected columns
+            if self.is_independent(col, selected, matrix):
+                
+                # If yes, add the index of the current column to the selected list
+                selected.append (i)
+                logger.info("A new column added to selected matrix. |col = "+str(i)+" | new size = "+str(len(selected)))
+            # Check if we have found enough columns
+            if len (selected) == rows:
+                # If yes, return the submatrix formed by the selected columns
+                logger.success("An invertible square submatrix has been found!")
+                self._other_vars=selected
+                self._partial_vars = np.setdiff1d( np.arange(self._ydim), self._other_vars)
+                self._A_partial = self._A[:, self._partial_vars]
+                self,_A_other = self=self._A[:,self._other_vars]
+                self._A_other_inv = torch.inverse(self._A[:, self._other_vars])
+                logger.success("A_partial and A_others constructed successfully at i= "+str(i)+" | det(A_thers) = "+str(torch.det(self.A_other)))
+                return matrix [:, selected]
+        # If we reach here, it means we did not find any square submatrix that is invertible
+        # Return an empty matrix
+        logger.exception("No invertible square matrix found.Output is an empty tensor.")
+        return torch.tensor ([])
 
 
 
