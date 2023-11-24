@@ -13,7 +13,6 @@ import cobra
 import numpy as np
 from scipy.linalg import null_space
 
-M = 1000.0
 LOG_MODE=True
 
 def parse_gpr_rule(gpr_rule_str: str) -> list:
@@ -36,13 +35,14 @@ def parse_gpr_rule(gpr_rule_str: str) -> list:
 
 
 class MetabolicModelParser:
-    def __init__(self, filepath_to_model: str) -> None:
+    def __init__(self, filepath_to_model: str,M=300) -> None:
         """
         :param filepath_to_model: Filepath for the metabolic_model.xml (SBML) file
         """
         # ########################################
         self.filepath_to_model = filepath_to_model
         self.metabolic_model = None
+        self.M=M
         self.load_metabolic_model()
         # ############################
         self.s_matrix=None
@@ -64,6 +64,7 @@ class MetabolicModelParser:
         self.upper_bounds = {}
         self.fill_bounds()
         # ############################
+        
 
 
 
@@ -185,9 +186,9 @@ class MetabolicModelParser:
             _rxn_id = self.reactions_map[_reaction.id]
             # ###### -math.inf and math.inf --> -M and M ######
             if _reaction.lower_bound == -math.inf:
-                _reaction.lower_bound = -M
+                _reaction.lower_bound = -self.M
             if _reaction.upper_bound == math.inf:
-                _reaction.upper_bound = M
+                _reaction.upper_bound = self.M
             # ################################################
             self.lower_bounds[_rxn_id] = _reaction.lower_bound
             self.upper_bounds[_rxn_id] = _reaction.upper_bound
