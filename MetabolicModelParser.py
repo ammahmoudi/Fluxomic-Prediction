@@ -235,7 +235,7 @@ class MetabolicModelParser:
 
     def make_and_save_stoichiometric_data(self,
                                           folder_to_save: str,
-                                          use_fva: bool = False,save_kernel_projector=False) -> None:
+                                          use_fva: bool = False, save_kernel_projector=False, save=True, mode=1) -> None:
         """
         This method, makes A = S.diag(u-l) sparse matrix and b = Sl vector,
             and saves them.
@@ -272,38 +272,46 @@ class MetabolicModelParser:
             _metabolites_dict = _reaction.metabolites
             for _metabolite, _coeff in _metabolites_dict.items():
                 _met_id = self.metabolites_map[_metabolite.id]
-                a_text = _met_id + ',' + _rxn_id + ':\t' + str(_coeff * _diff_bound) + '\n'
-                a_info.append(a_text)
-                self.b_vector[_met_id] += _coeff * _lb
-                self.s_matrix[int(_met_id[1:]), int(_rxn_id[1:])] = _coeff  # Reading indexes from 'Mxxx' and 'Rxxx'
+                if(mode==1):
+                    a_text = _met_id + ',' + _rxn_id + ':\t' + str(_coeff * _diff_bound) + '\n'
+                    a_info.append(a_text)
+                    self.b_vector[_met_id] += _coeff * _lb
+                    self.s_matrix[int(_met_id[1:]), int(_rxn_id[1:])] = _coeff  # Reading indexes from 'Mxxx' and 'Rxxx'
+
+                elif(mode==2):
+                    a_text = _met_id + ',' + _rxn_id + ':\t' + str(_coeff) + '\n'
+                    a_info.append(a_text)
+                    # self.b_vector[_met_id] += _coeff * _lb
+                    self.s_matrix[int(_met_id[1:]), int(_rxn_id[1:])] = _coeff  # Reading indexes from 'Mxxx' and 'Rxxx'
+
         s_kernel = null_space(self.s_matrix)
         kernel_projector = np.matmul(s_kernel, s_kernel.T
                                      )
         # ################## Saving #####################
-
-        # A
-        with open(filepath_to_save_a, 'w') as file:
-            file.writelines(a_info)
-        # b
-        with open(filepath_to_save_b, 'w') as file:
-            for _met_id, _value in self.b_vector.items():
-                saving_text = _met_id + ':\t' + str(_value) + '\n'
-                file.writelines([saving_text])
-        # lb
-        with open(filepath_to_save_l, 'w') as file:
-            for _rxn_id, _value in self.lower_bounds.items():
-                saving_text = _rxn_id + ':\t' + str(_value) + '\n'
-                file.writelines([saving_text])
-        # ub
-        with open(filepath_to_save_u, 'w') as file:
-            for _rxn_id, _value in self.upper_bounds.items():
-                saving_text = _rxn_id + ':\t' + str(_value) + '\n'
-                file.writelines([saving_text])
-        # kernel_projector
-        np.save(filepath_to_save_projector, kernel_projector)
-        # ########################################################
-        if (LOG_MODE):
-            print("Stochiometric data saved.")
+        if save:
+            # A
+            with open(filepath_to_save_a, 'w') as file:
+                file.writelines(a_info)
+            # b
+            with open(filepath_to_save_b, 'w') as file:
+                for _met_id, _value in self.b_vector.items():
+                    saving_text = _met_id + ':\t' + str(_value) + '\n'
+                    file.writelines([saving_text])
+            # lb
+            with open(filepath_to_save_l, 'w') as file:
+                for _rxn_id, _value in self.lower_bounds.items():
+                    saving_text = _rxn_id + ':\t' + str(_value) + '\n'
+                    file.writelines([saving_text])
+            # ub
+            with open(filepath_to_save_u, 'w') as file:
+                for _rxn_id, _value in self.upper_bounds.items():
+                    saving_text = _rxn_id + ':\t' + str(_value) + '\n'
+                    file.writelines([saving_text])
+            # kernel_projector
+            np.save(filepath_to_save_projector, kernel_projector)
+            # ########################################################
+            if (LOG_MODE):
+                print("Stochiometric data saved.")
 
 def main():
     mmp = MetabolicModelParser(filepath_to_model="./Data/recon_2.2.xml")
