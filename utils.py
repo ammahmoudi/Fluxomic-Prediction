@@ -26,8 +26,8 @@ import time
 #logging
 from loguru import logger
 import sys        # <!- add this line
-logger.remove(0)             # <- add this line
-logger.add(sys.stdout, level="INFO")   # <- add this line
+# logger.remove(0)             # <- add this line
+logger.add(sys.stdout, level="TRACE")   # <- add this line
 
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -78,7 +78,8 @@ class T2FProblem:
 
         
         #trying to find a non-zero determinant submatrix of A to solve in a unique way.
-        self.find_square_submatrix(self.A)
+        # self.find_square_submatrix(self.A)
+        self.column_subset_selection(self._A,self._A.shape[1])
         print(self.partial_vars)
         
 
@@ -179,6 +180,56 @@ class T2FProblem:
         # Return an empty matrix
         logger.exception("No invertible square matrix found.Output is an empty tensor.")
         return torch.tensor ([])
+    
+    def column_subset_selection (self, matrix,k):
+
+        self._partial_vars=[]
+        self._other_vars=[]
+        # Get the number of rows and columns of the matrix
+        rows, cols = matrix.size()
+
+
+
+        # Find a subset of k columns of Q that are linearly independent
+        # This can be done by finding the pivot columns of R
+        pivots=[]
+        k_prime=0
+        while(k_prime!=k):
+            # Randomly sample k columns of A and form C
+            self._other_vars = np.random.choice(cols, k, replace=False)
+            self._partial_vars = np.setdiff1d( np.arange(self._ydim), self._other_vars)
+
+            C = matrix[:, self.other_vars]
+
+            # Compute the QR factorization of C
+            Q, R = np.linalg.qr(C)
+            # logger.trace("QR factorization of C has been completed.")
+                
+            pivots = np.abs(np.diag(R)) > 1e-10
+            k_prime=np.count_nonzero(pivots)
+            logger.trace("k prime = "+str(k_prime))
+
+
+        Q_prime = Q[:, pivots]
+
+        # Return the corresponding columns of A as A_prime
+        A_prime = matrix[:, self.other_vars[pivots]]
+
+        # Transpose A_prime and compute its QR factorization
+        Q, R = np.linalg.qr(A_prime.T)
+
+        # Return R as the square and invertible matrix of size k x k
+        R = R.astype(np.float64)
+        # print(R.shape) # (5000, 5000)
+        # print(np.linalg.det(R)) # non-zero
+
+        self._A_partial = self._A[:, self._partial_vars]
+        self,_A_other = self=self._A[:,self._other_vars]
+        logger.info("submatrix with shape "+R.shape+" and determinent "+torch.det(R)+" has been found!")
+        return torch.tensor(R)
+
+
+   
 
 
 
