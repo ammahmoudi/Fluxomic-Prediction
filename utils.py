@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Function
 torch.set_default_dtype(torch.float64)
-
+import scipy.linalg as la
 import numpy as np
 import pyomo.environ as pyo
 # Import the solver
@@ -75,12 +75,14 @@ class T2FProblem:
         self._nknowns = 0
         self._valid_frac = valid_frac
         self._test_frac = test_frac
+        self._partial_vars=[]
+        self._other_vars=[]
 
         
         #trying to find a non-zero determinant submatrix of A to solve in a unique way.
         # self.find_square_submatrix(self.A)
-        self.column_subset_selection(self._A,self._A.shape[1])
-        print(self.partial_vars)
+        self.column_subset_selection_2(self._A,self._A.shape[0])
+        print(self._partial_vars)
         
 
         ### For Pytorch
@@ -199,7 +201,7 @@ class T2FProblem:
             self._other_vars = np.random.choice(cols, k, replace=False)
             self._partial_vars = np.setdiff1d( np.arange(self._ydim), self._other_vars)
 
-            C = matrix[:, self.other_vars]
+            C = matrix[:, self._other_vars]
 
             # Compute the QR factorization of C
             Q, R = np.linalg.qr(C)
@@ -213,7 +215,7 @@ class T2FProblem:
         Q_prime = Q[:, pivots]
 
         # Return the corresponding columns of A as A_prime
-        A_prime = matrix[:, self.other_vars[pivots]]
+        A_prime = matrix[:, self._other_vars[pivots]]
 
         # Transpose A_prime and compute its QR factorization
         Q, R = np.linalg.qr(A_prime.T)
@@ -227,6 +229,64 @@ class T2FProblem:
         self,_A_other = self=self._A[:,self._other_vars]
         logger.info("submatrix with shape "+R.shape+" and determinent "+torch.det(R)+" has been found!")
         return torch.tensor(R)
+    
+
+
+
+
+    def column_subset_selection_2 (self, matrix,k):
+
+        # self._partial_vars=[]
+        # self._other_vars=[]
+        # Get the number of rows and columns of the matrix
+        rows, cols = matrix.size()
+
+        # A is the sparse matrix of size m x n
+        # k is the desired number of columns to select, where k <= m
+        # returns a square, invertible matrix of size k x k
+        
+        # compute the squared Euclidean norms of the columns of A
+        norms = torch.sum(matrix**2, axis=0)
+        
+        # normalize the norms to obtain a probability distribution
+        p = norms / torch.sum(norms)
+        k_prime=0
+        while(k_prime!=k):
+            # Randomly sample k columns of A and form C
+            # sample k columns of A according to p
+            self._other_vars = np.random.choice(cols, k, replace=False, p=p)
+            self._partial_vars = np.setdiff1d( np.arange(self._ydim), self._other_vars)
+
+            C = matrix[:, self._other_vars]
+            
+            # compute the QR decomposition of C
+            Q, R = la.qr(C, mode='economic')
+            logger.trace("Q.R ro C = "+str(C.shape)+" :"+"Q= "+str(Q.shape)+", R="+str(R.shape))
+            
+            # find a set of k linearly independent columns of Q
+            P = la.lu(R)[1] # permutation matrix that puts R in echelon form
+
+            Q = Q @ P # permute the columns of Q accordingly
+            logger.trace("Q.P ro P :"+"Q= "+str(Q.shape)+", P="+str(P.shape))
+            P=torch.tensor(P)
+            R=torch.tensor(R)
+            indices = torch.where(torch.diag(R @ P) != 0)[0] # indices of nonzero diagonal entries
+            
+            k_prime=len(indices)
+            logger.trace("k prime = "+str(k_prime))
+        
+        
+        Q = Q[:, indices] # select the corresponding columns of Q
+        self._other_vars=indices
+        self._partial_vars = np.setdiff1d( np.arange(self._ydim), self._other_vars)
+
+        # return the selected columns of A
+        self._A_partial = self._A[:, self._partial_vars]
+        self._A_other = self._A[:,self._other_vars]
+
+        logger.info("A_others has been found with det= "+str(torch.det(self._A_other)))
+
+        return matrix[:, self._other_vars]
 
 
    
@@ -383,16 +443,16 @@ class T2FProblem:
         Y_max_effective = self.Y_max - (X @ self._A_other_inv.T)
         Y_min_effective =  (X @ self._A_other_inv.T)-self.Y_min
        
-        grad_partial_max = 2 * torch.clamp(Y[:, self.partial_vars] - Y_max_effective, 0)
-        grad_partial_min = 2 * torch.clamp(Y_min_effective - Y[:, self.partial_vars] , 0)
+        grad_partial_max = 2 * torch.clamp(Y[:, self._partial_vars] - Y_max_effective, 0)
+        grad_partial_min = 2 * torch.clamp(Y_min_effective - Y[:, self._partial_vars] , 0)
 
         Y = torch.zeros(2*X.shape[0], self.ydim, device=self.device)
         grad_partial= torch.cat([grad_partial_max,grad_other_min])
         grad_other_min= - (grad_partial_min @ self._A_partial.T) @ self._A_other_inv.T
         grad_other_max= - (grad_partial_max @ self._A_partial.T) @ self._A_other_inv.T
         grad_other= torch.cat([grad_other_max,grad_other_min])
-        Y[:, self.partial_vars] = grad_partial
-        Y[:, self.other_vars] = grad_other
+        Y[:, self._partial_vars] = grad_partial
+        Y[:, self._other_vars] = grad_other
        
         return Y
 
@@ -403,8 +463,8 @@ class T2FProblem:
     # Solves for the full set of variables
     def complete_partial(self, X, Z):
         Y = torch.zeros(X.shape[0], self.ydim, device=self.device)
-        Y[:, self.partial_vars] = Z
-        Y[:, self.other_vars] = (X - Z @ self._A_partial.T) @ self._A_other_inv.T
+        Y[:, self._partial_vars] = Z
+        Y[:, self._other_vars] = (X - Z @ self._A_partial.T) @ self._A_other_inv.T
         return Y
     
 
