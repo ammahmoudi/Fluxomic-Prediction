@@ -81,8 +81,15 @@ class T2FProblem:
         
         #trying to find a non-zero determinant submatrix of A to solve in a unique way.
         # self.find_square_submatrix(self.A)
-        self.column_subset_selection_2(self._A,self._A.shape[0])
-        print(self._partial_vars)
+        self.random_invertible_finder(self._A,self._A.shape[0])
+        with open('Data\A_other_invers.txt', 'w') as testfile:
+             for row in self._A_other_inv:
+                 testfile.write(' '.join([str(a) for a in row]) + '\n')
+        with open('Data\A_other_indexes.txt', 'w') as testfile:
+             for row in self._other_vars:
+                 testfile.write(' '.join([str(a) for a in row]) + '\n')
+        # print(self._partial_vars)
+        # print(self._A_other_inv)
         
 
         ### For Pytorch
