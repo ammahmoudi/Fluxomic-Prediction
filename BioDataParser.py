@@ -223,3 +223,4 @@ class Stoichiometry:
         :return: self.projection_matrix
         """
         return self.projection_matrix
+
