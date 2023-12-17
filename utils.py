@@ -26,7 +26,8 @@ import time
 #logging
 from loguru import logger
 import sys        # <!- add this line
-# logger.remove(0)             # <- add this line
+logger.remove(0)             # <- add this line
+# logger.remove()
 logger.add(sys.stdout, level="TRACE")   # <- add this line
 
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
