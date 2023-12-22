@@ -5,6 +5,10 @@ import sympy
 import torch
 import scipy.linalg as la
 from timeit import default_timer as timer
+import pickle
+import datetime
+
+
 
 #logging
 from loguru import logger
@@ -127,8 +131,10 @@ def full_rank_maker_4(A):
     # Print the new matrix
     return A_new
 
-def full_rank_maker_5(matrix):
+def full_rank_maker_5(matrix,threshold=1e-6,mode="row"):
     start = timer()
+    #if mode is col transpose matrix
+    if (mode=="column"):matrix=matrix.T
     # Define your sparse matrix A
     A = sp.csr_matrix(matrix)
 
@@ -150,15 +156,15 @@ def full_rank_maker_5(matrix):
             # Subtract the projection of the current row onto each orthonormal vector
             u = u - np.dot(v, q) * q
         # Check if the orthogonal vector is zero or close to zero
-        if np.linalg.norm(u) < 1e-10:
+        if np.linalg.norm(u) < threshold:
             d=d+1
-            logger.info("dependent row found: "+str(d))
+            logger.trace("dependent row found: "+str(d))
             # If yes, then the current row is dependent and can be skipped
             continue
         else:
             # If no, then the current row is independent and can be added to the list
             ind_rows.append(i)
-            logger.info("independents: "+str(len(ind_rows)))
+            logger.trace("independents: "+str(len(ind_rows)))
             # Normalize the orthogonal vector and add it to the orthonormal list
             Q.append(u / np.linalg.norm(u))
 
@@ -167,9 +173,14 @@ def full_rank_maker_5(matrix):
 
     # Print the orthonormal matrix
     # print(Q)
-    print(ind_rows)
+    # print(ind_rows)
+    ind_file_name="good-"+mode+"-"+str(len(ind_rows))+"-"+str(datetime.datetime.now()).replace(" ","-").replace(".","-").replace(":","-")
+    with open(ind_file_name, "wb") as fp:   #Pickling
+        pickle.dump(ind_rows, fp)
+
     # Select only the independent rows from A
     A_new = A[ind_rows, :]
+    if (mode=="column"):A_new=A_new.T
     end = timer()
     logger.success("full rank matrix with shape "+str(A_new.shape)+" found within time: "+str(end-start))
     return A_new
