@@ -17,7 +17,7 @@ import sys        # <!- add this line
 logger.remove()             # <- add this line
 logger.add(sys.stdout, level="TRACE")   # <- add this line
 log_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS zz}</green> | <level>{level: <8}</level> | <yellow>Line {line: >4} ({file}):</yellow> <b>{message}</b>"
-log_path="log-"+str(datetime.datetime.now()).replace(" ","-").replace(".","-").replace(":","-")+".log"
+log_path=".\logs\log-"+str(datetime.datetime.now()).replace(" ","-").replace(".","-").replace(":","-")+".log"
 logger.add(log_path, level="TRACE", format=log_format, colorize=False, backtrace=True, diagnose=True)
 
 
@@ -192,8 +192,8 @@ def make_chosen_matrix(A,rows_path,columns_path,mode="mixed"):
         with open(rows_path, "rb") as fp:   #Pickling
             rows = pickle.load(fp)
         # print(rows)
-        print(A.shape)
-        print(len(rows))
+        # print(A.shape)
+        # print(len(rows))
         A=A[rows,:]
     if(mode=="column" or mode=="mixed"):
         with open(columns_path, "rb") as fp:   #Pickling

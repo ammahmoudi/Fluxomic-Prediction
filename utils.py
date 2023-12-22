@@ -2,21 +2,22 @@ import torch
 import torch.nn as nn
 from torch.autograd import Function
 torch.set_default_dtype(torch.float64)
+
 import scipy.linalg as la
 import numpy as np
 import pyomo.environ as pyo
 # Import the solver
 from pyomo.opt import SolverFactory
 
-# import osqp
-# from qpth.qp import QPFunction
+import osqp
+from qpth.qp import QPFunction
 
-# from scipy.linalg import svd
-# from scipy.sparse import csc_matrix
+from scipy.linalg import svd
+from scipy.sparse import csc_matrix
 
 import hashlib
 from copy import deepcopy
-# import scipy.io as spio
+import scipy.io as spio
 import time
 
 # from pypower.api import case57
@@ -360,41 +361,33 @@ class T2FProblem:
 
 class SimpleProblem2:
     """ 
-        minimize y
-        s.t.        AY=X
-                    Y_min < Y < Y_max   
-
-        num_r= Number of reactions
-        num_m= numer of metabloites
-        num_ineq= 2*num_r
-        num_m=num_eq 
-        X=(num_m, num_examples)
-        A=(num_m,num_r)
-        Y,Y_min,Y_max=(num_r,num_examples )  
-
-        p=(num_r,num_examples)
-        Q=(1,1)
-        G=(2,1)
-        h=(2,num_r)
-        y=v
-        p=-c
-        Q=0
-        Q=(r,1)
-        G=stackup[1,-1]
-        h=stackup[y_up,-y_min]
-        A=S
-        Gy<=h
-        2*1 * 1*r =2*r 
-        minimize_y 1/2 * y^T Q y + p^Ty
-        r*1 1*1 1*r + r*1  1*r
+     minimize_y 1/2 * y^T Q y + p^Ty
         s.t.       Ay =  x
                    Gy <= h
 
+        where:
+            num_r= Number of reactions
+            num_m= numer of metabloites
+            num_ineq= 2*num_r
+            num_m=num_eq 
+            X=(num_m, num_examples)
+            A=(num_m,num_r)
+            Y,Y_min,Y_max=(num_r,num_examples)  
+            p=(num_r,num_examples)
+            Q=(num_r,num_r)
+            G=(2*num_r,num_r)
+            h=(2*num_r,num_examples)
 
 
-        y=(r,1)
-        x*r r,1 <= x,1
-        2r,r * r,1 <= 2r,1
+        more info:
+            y=v
+            p=-c
+            Q=0        
+            h=hstack[y_up,-y_min]
+            G=hstack(I,-I)
+            A=S
+            Gy<=h
+
     """
     def __init__(self, Q, p, A, G, h, X, valid_frac=0.0833, test_frac=0.0833):
         self._Q = torch.tensor(Q)
@@ -613,9 +606,9 @@ class SimpleProblem2:
         if solver_type == 'qpth':
             print('running qpth')
             start_time = time.time()
-            res = QPFunction(eps=tol, verbose=False)(self.Q, self.p, self.G, self.h, self.A, X)
+            res = QPFunction(eps=tol, verbose=False,check_Q_spd=False)(self.Q, self.p, self.G, self.h, self.A, X)
             end_time = time.time()
-
+            print(self.Q.count_nonzero())
             sols = np.array(res.detach().cpu().numpy())
             total_time = end_time - start_time
             parallel_time = total_time
@@ -627,21 +620,26 @@ class SimpleProblem2:
             X_np = X.detach().cpu().numpy()
             Y = []
             total_time = 0
-            for Xi in X_np:
-                solver = osqp.OSQP()
-                my_A = np.vstack([A, G])
-                my_l = np.hstack([Xi, -np.ones(h.shape[0]) * np.inf])
-                my_u = np.hstack([Xi, h])
-                solver.setup(P=csc_matrix(Q), q=p, A=csc_matrix(my_A), l=my_l, u=my_u, verbose=False, eps_prim_inf=tol)
-                start_time = time.time()
-                results = solver.solve()
-                end_time = time.time()
+            
+            solver = osqp.OSQP()
+            my_A = np.vstack([A, np.eye(self.ydim,self.ydim)])
+            y_max,y_min=np.split(h,2)
+            y_min=-y_min
+            my_l = np.vstack([X_np, y_min])
+            my_u = np.vstack([X_np, y_max])
+            print(my_l.shape)
+            print(my_u.shape)
+            print(my_l[5733],my_u[5733])
+            solver.setup(P=csc_matrix(Q), q=p, A=csc_matrix(my_A), l=my_l, u=my_u, verbose=False, eps_prim_inf=tol)
+            start_time = time.time()
+            results = solver.solve()
+            end_time = time.time()
 
-                total_time += (end_time - start_time)
-                if results.info.status == 'solved':
-                    Y.append(results.x)
-                else:
-                    Y.append(np.ones(self.ydim) * np.nan)
+            total_time += (end_time - start_time)
+            if results.info.status == 'solved':
+                Y.append(results.x)
+            else:
+                Y.append(np.ones(self.ydim) * np.nan)
 
             sols = np.array(Y)
             parallel_time = total_time/len(X_np)
@@ -652,10 +650,11 @@ class SimpleProblem2:
         return sols, total_time, parallel_time
 
     def calc_Y(self):
-        Y = self.opt_solve(self.X)[0]
-        feas_mask =  ~np.isnan(Y).all(axis=1)  
-        self._num = feas_mask.sum()
-        self._X = self._X[feas_mask]
-        self._Y = torch.tensor(Y[feas_mask])
+        Y = self.opt_solve(self.X,solver_type="osqp")[0]
+        # feas_mask =  ~np.isnan(Y).all(axis=0)  
+        # self._num = feas_mask.sum()
+        # self._X = self._X[feas_mask]
+        # self._Y = torch.tensor(Y[feas_mask])
+        self._Y=torch.tensor(Y)
         return Y
 

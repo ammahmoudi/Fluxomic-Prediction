@@ -29,7 +29,7 @@ A=mt.make_chosen_matrix(A,good_rows,good_columns)
 # A=A.T
 
 # print(np.linalg.matrix_rank(A))
-print(A.shape)
+# print(A.shape)
 # A=mt.full_rank_maker_5(A,threshold=1e-6)
 # print(A.shape)
 # A=mt.full_rank_maker_5(A,threshold=1e-6,mode="column")
@@ -51,29 +51,33 @@ Y_max=data.get_ub()
 Y_max=Y_max.reshape((Y_max.shape[0], -1)) 
 Y_max=mt.make_chosen_matrix(Y_max,good_columns,None,"row")
 
-
+print(Y_max[-1],Y_min[-1])
 
 
 # define G. a (2r,r) shape matrix which upper part prepare y for upper bound and second part for lower bound 
 G_up=np.eye(num_r)
 G_down=-np.eye(num_r)
-G=np.concatenate([G_up,G_down])
+G=np.vstack((G_up,G_down))
 
 print(G.shape)
 #define h by stack concatenating upper and negative of lower bounds
-h=np.concatenate([Y_max,-Y_min])
+h=np.vstack((Y_max,-Y_min))
 
 #define Q full zero in (r,r) shape
 Q=np.zeros((num_r,num_r))
 
 #define p (need to review)
 p=np.ones((num_r,1))
+print()
 
 num_var = Y_max.shape[1]
 num_ineq = G.shape[0]
 num_eq = A.shape[0]
 num_examples = X.shape[0]
 
+# print(Q)
+# a=torch.linalg.cholesky(torch.tensor(Q))
+# print(a)
 
 
 
@@ -99,6 +103,7 @@ num_examples = X.shape[0]
 problem2=SimpleProblem2(Q,p,A,G,h,X)
 problem2.calc_Y()
 print(len(problem2.Y))
+print(problem2.Y)
 
 with open("./Data/recon2.2_dataset_var{}_ineq{}_eq{}_ex{}".format(num_var, num_ineq, num_eq, num_examples), 'wb') as f:
     pickle.dump(problem2, f)
