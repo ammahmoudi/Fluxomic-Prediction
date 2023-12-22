@@ -229,6 +229,53 @@ def random_invertible_finder(matrix):
     else:
             
             _A_partial = matrix[:, _partial_vars]
+            
+            _A_other_inv = np.linalg.inv(matrix[:, _other_vars])
+            _A_other=matrix[:,_other_vars]
+            logger.success("A_partial and A_others constructed successfully at i= "+str(i)+" | det(A_thers) = "+str(det))
+            return _partial_vars,_other_vars,_A_other,_A_partial,_A_other_inv
+            # print(_partial_vars)
+    
+def det_sparse(m):
+    logger.trace("starting calculation of determininet of a sparse matrix of shape:"+str(m.shape))
+    lu = svds.splu(m)
+    diagL = lu.L.diagonal()
+    diagU = lu.U.diagonal()
+    d = diagL.prod()*diagU.prod()
+    diagL = diagL.astype(np.complex128)
+    diagU = diagU.astype(np.complex128)
+    logdet = np.log(diagL).sum() + np.log(diagU).sum()
+    det = np.exp(logdet) # usually underflows/overflows for large matrices
+    return det
+
+def random_invertible_finder_sparse(matrix):
+    """
+        This method tries to makes input matrix invertible by removing columns.
+        by selecting random columns
+        
+        :return: partial_vars, other_vars, A_other, A_partial, A_other_inv
+    """
+    det = 0
+    i = 0
+    max_i = 1000
+    matrix = sp.csr_matrix(matrix)
+    
+    while abs(det) < 0.0001 and i<max_i :
+        _partial_vars = np.random.choice(matrix.shape[1], matrix.shape[1]-matrix.shape[0], replace=False)
+        _other_vars = np.setdiff1d( np.arange(matrix.shape[1]), _partial_vars)
+        
+        
+        # det = sp.linalg(matrix[:, _other_vars])
+        det = det_sparse(matrix[:, _other_vars])
+        i += 1
+        logger.trace("i= "+str(i)+" | det(A_others) = "+str(det))
+    if i == max_i:
+        logger.exception("i reached the maximum bound but the desired submatrix is not achieved.")
+        raise Exception
+
+    else:
+            
+            _A_partial = matrix[:, _partial_vars]
             _A_other_inv = np.linalg.inverse(matrix[:, _other_vars])
             _A_other=matrix[:,_other_vars]
             logger.success("A_partial and A_others constructed successfully at i= "+str(i)+" | det(A_thers) = "+str(det))
