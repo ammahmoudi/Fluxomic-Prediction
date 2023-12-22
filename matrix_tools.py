@@ -187,6 +187,23 @@ def full_rank_maker_5(matrix,threshold=1e-6,mode="row"):
 
 
 
+def make_chosen_matrix(A,rows_path,columns_path,mode="mixed"):
+    if(mode=="row" or mode=="mixed"):
+        with open(rows_path, "rb") as fp:   #Pickling
+            rows = pickle.load(fp)
+        # print(rows)
+        print(A.shape)
+        print(len(rows))
+        A=A[rows,:]
+    if(mode=="column" or mode=="mixed"):
+        with open(columns_path, "rb") as fp:   #Pickling
+            columns = pickle.load(fp)
+        A=A.T[columns, :]
+        A=A.T
+    
+    return A
+
+
 
 def random_invertible_finder(matrix):
     """
