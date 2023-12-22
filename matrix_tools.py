@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.sparse as sp
-from scipy.sparse.linalg import svds
+from scipy.sparse import linalg as svds
 import sympy
 import torch
 import scipy.linalg as la
