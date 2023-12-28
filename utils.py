@@ -588,6 +588,7 @@ class SimpleProblem2:
 
     def ineq_partial_grad(self, X, Y):
         G_effective = self.G[:, self.partial_vars] - self.G[:, self.other_vars] @ (self._A_other_inv @ self._A_partial)
+        logger.trace("calculating h effective with h="+str(self.h.shape)+", X="+str(X.shape)+", A_other_inv="+str(self._A_other_inv.shape)+", G_others="+str(self.G[:, self.other_vars].shape))
         h_effective = self.h - (X @ self._A_other_inv.T) @ self.G[:, self.other_vars].T
         grad = 2 * torch.clamp(Y[:, self.partial_vars] @ G_effective.T - h_effective, 0) @ G_effective
         Y = torch.zeros(X.shape[0], self.ydim, device=self.device)
@@ -609,17 +610,17 @@ class SimpleProblem2:
     def opt_solve(self, X, solver_type='osqp', tol=1e-4):
 
         if solver_type == 'qpth':
-            print('running qpth')
+            logger.trace('running qpth')
             start_time = time.time()
             res = QPFunction(eps=tol, verbose=False,check_Q_spd=False)(self.Q, self.p, self.G, self.h, self.A, X)
             end_time = time.time()
-            print(self.Q.count_nonzero())
+            # print(self.Q.count_nonzero())
             sols = np.array(res.detach().cpu().numpy())
             total_time = end_time - start_time
             parallel_time = total_time
         
         elif solver_type == 'osqp':
-            print('running osqp')
+            logger.trace('running osqp')
             Q, p, A, G, h = \
                 self.Q_np, self.p_np, self.A_np, self.G_np, self.h_np
             X_np = X.detach().cpu().numpy()
@@ -630,15 +631,19 @@ class SimpleProblem2:
             my_A = np.vstack([A, np.eye(self.ydim,self.ydim)])
             y_max,y_min=np.split(h,2)
             y_min=-y_min
-            my_l = np.vstack([X_np, y_min])
-            my_u = np.vstack([X_np, y_max])
-            print(my_l.shape)
-            print(my_u.shape)
-            print(my_l[5733],my_u[5733])
+            my_X=X_np.reshape((X.shape[1], -1))
+            # print("my_X",my_X.shape)
+            # print("y_max:",y_max.shape)
+            my_l = np.vstack([my_X, y_min.T])
+            my_u = np.vstack([my_X, y_max.T])
+            # print(my_l.shape)
+            # print(my_u.shape)
+            # print(my_l[5733],my_u[5733])
             solver.setup(P=csc_matrix(Q), q=p, A=csc_matrix(my_A), l=my_l, u=my_u, verbose=False, eps_prim_inf=tol)
             start_time = time.time()
             results = solver.solve()
             end_time = time.time()
+            
 
             total_time += (end_time - start_time)
             if results.info.status == 'solved':
@@ -648,6 +653,7 @@ class SimpleProblem2:
 
             sols = np.array(Y)
             parallel_time = total_time/len(X_np)
+            logger.success("Problem has been solved in time "+str(total_time)+", using OSQP with Y in size:"+str(sols.shape))
 
         else:
             raise NotImplementedError
