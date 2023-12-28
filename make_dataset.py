@@ -7,14 +7,21 @@ sys.path.insert(1, os.path.join(sys.path[0], os.pardir, os.pardir))
 from utils import T2FProblem
 from utils import SimpleProblem2
 from BioDataParser import Stoichiometry
-#logging
-from loguru import logger
-# logger.remove()
-import sys        # <!- add this line
-# logger.remove(0)             # <- add this line
-logger.add(sys.stdout, level="TRACE")   # <- add this line
+
+
 import matrix_tools as mt
-import good_matrix
+
+#logging
+import datetime
+
+from loguru import logger
+import sys        # <!- add this line
+logger.remove()             # <- add this line
+logger.add(sys.stdout, level="TRACE")   # <- add this line
+log_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS zz}</green> | <level>{level: <8}</level> | <yellow>Line {line: >4} ({file}):</yellow> <b>{message}</b>"
+log_path=".\logs\log-"+str(datetime.datetime.now()).replace(" ","-").replace(".","-").replace(":","-")+".log"
+logger.add(log_path, level="TRACE", format=log_format, colorize=False, backtrace=True, diagnose=True)
+
 
 data=Stoichiometry("./Data/A.txt","./Data/b.txt","./Data/lb.txt","./Data/ub.txt","./Data/projector.npy")
 

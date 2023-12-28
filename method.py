@@ -25,9 +25,14 @@ import default_args
 
 #logging
 from loguru import logger
+import datetime
 import sys        # <!- add this line
-logger.remove(0)             # <- add this line
+logger.remove()             # <- add this line
 logger.add(sys.stdout, level="TRACE")   # <- add this line
+log_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS zz}</green> | <level>{level: <8}</level> | <yellow>Line {line: >4} ({file}):</yellow> <b>{message}</b>"
+log_path=".\logs\log-"+str(datetime.datetime.now()).replace(" ","-").replace(".","-").replace(":","-")+".log"
+logger.add(log_path, level="TRACE", format=log_format, colorize=False, backtrace=True, diagnose=True)
+
 
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 

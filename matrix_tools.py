@@ -6,19 +6,18 @@ import torch
 import scipy.linalg as la
 from timeit import default_timer as timer
 import pickle
-import datetime
 
 
 
 #logging
 from loguru import logger
-# logger.remove()
+import datetime
 import sys        # <!- add this line
-logger.remove()             # <- add this line
-logger.add(sys.stdout, level="TRACE")   # <- add this line
-log_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS zz}</green> | <level>{level: <8}</level> | <yellow>Line {line: >4} ({file}):</yellow> <b>{message}</b>"
-log_path=".\logs\log-"+str(datetime.datetime.now()).replace(" ","-").replace(".","-").replace(":","-")+".log"
-logger.add(log_path, level="TRACE", format=log_format, colorize=False, backtrace=True, diagnose=True)
+# logger.remove()             # <- add this line
+# logger.add(sys.stdout, level="TRACE")   # <- add this line
+# log_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS zz}</green> | <level>{level: <8}</level> | <yellow>Line {line: >4} ({file}):</yellow> <b>{message}</b>"
+# log_path=".\logs\log-"+str(datetime.datetime.now()).replace(" ","-").replace(".","-").replace(":","-")+".log"
+# logger.add(log_path, level="TRACE", format=log_format, colorize=False, backtrace=True, diagnose=True)
 
 
 
