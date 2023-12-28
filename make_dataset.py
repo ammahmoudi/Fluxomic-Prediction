@@ -47,18 +47,18 @@ num_m,num_r=A.shape
 
 X=data.get_b_vector()
 X=X.reshape((X.shape[0], -1))
-X=mt.make_chosen_matrix(X,good_rows,None,"row")
-
+X=mt.make_chosen_matrix(X,good_rows,None, "row")
+X=X.reshape((1,X.shape[0]))
 
 Y_min=data.get_lb()
 Y_min=Y_min.reshape((Y_min.shape[0], -1)) 
-Y_min=mt.make_chosen_matrix(Y_min,good_columns,None,"row")
+Y_min=mt.make_chosen_matrix(Y_min,good_columns,None, "row").flatten()
 
 Y_max=data.get_ub()
 Y_max=Y_max.reshape((Y_max.shape[0], -1)) 
-Y_max=mt.make_chosen_matrix(Y_max,good_columns,None,"row")
+Y_max=mt.make_chosen_matrix(Y_max,good_columns,None, "row").flatten()
 
-print(Y_max[-1],Y_min[-1])
+# print(X.shape)
 
 
 # define G. a (2r,r) shape matrix which upper part prepare y for upper bound and second part for lower bound 
@@ -66,7 +66,7 @@ G_up=np.eye(num_r)
 G_down=-np.eye(num_r)
 G=np.vstack((G_up,G_down))
 
-print(G.shape)
+# print(G.shape)
 #define h by stack concatenating upper and negative of lower bounds
 h=np.vstack((Y_max,-Y_min))
 
@@ -77,7 +77,7 @@ Q=np.zeros((num_r,num_r))
 p=np.ones((num_r,1))
 print()
 
-num_var = Y_max.shape[1]
+num_var = Y_max.shape[0]
 num_ineq = G.shape[0]
 num_eq = A.shape[0]
 num_examples = X.shape[0]
@@ -109,9 +109,9 @@ num_examples = X.shape[0]
 
 problem2=SimpleProblem2(Q,p,A,G,h,X)
 problem2.calc_Y()
-print(len(problem2.Y))
-print(problem2.Y)
+# print(len(problem2.Y))
+# print(problem2.Y)
 
-with open("./Data/recon2.2_dataset_var{}_ineq{}_eq{}_ex{}".format(num_var, num_ineq, num_eq, num_examples), 'wb') as f:
+with open("./datasets/T2F/recon2.2_dataset_var{}_ineq{}_eq{}_ex{}".format(num_var, num_ineq, num_eq, num_examples), 'wb') as f:
     pickle.dump(problem2, f)
 logger.success("Data has been seccussfully generated")
