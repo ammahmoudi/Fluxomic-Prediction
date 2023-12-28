@@ -104,7 +104,7 @@ def main():
     # Load data, and put on GPU if needed
     prob_type = args['probType']
     if prob_type == 'T2F':
-        filepath = os.path.join('datasets', 'T2F', "T2F-R{}-INEQ{}-EQ{}-E{}".format(
+        filepath = os.path.join('datasets', 'T2F', "recon2.2_dataset_var{}_ineq{}_eq{}_ex{}".format(
             args['simpleVar'], args['simpleIneq'], args['simpleEq'], args['simpleEx']))
     elif prob_type == 'simple':
         filepath = os.path.join('datasets', 'simple', "random_simple_dataset_var{}_ineq{}_eq{}_ex{}".format(
@@ -144,10 +144,14 @@ def train_net(data, args, save_dir):
     solver_step = args['lr']
     nepochs = args['epochs']
     batch_size = args['batchSize']
+    logger.trace("solver step: "+str(solver_step))
+    logger.trace("epochs: "+str(nepochs))
+    logger.trace("batch size: "+str(batch_size))
 
     train_dataset = TensorDataset(data.trainX)
     valid_dataset = TensorDataset(data.validX)
     test_dataset = TensorDataset(data.testX)
+    print(len(train_dataset))
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     valid_loader = DataLoader(valid_dataset, batch_size=len(valid_dataset))
