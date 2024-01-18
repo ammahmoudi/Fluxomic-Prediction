@@ -370,21 +370,23 @@ class SimpleProblem2:
         s.t.       Ay =  x
                    Gy <= h
 
-        where:
+        Where:
             num_r= Number of reactions
-            num_m= numer of metabloites
+            num_m= number of metabolites
             num_ineq= 2*num_r
             num_m=num_eq 
-            X=(num_m, num_examples)
+            X=(num_examples,num_m)
+            Y,Y_min,Y_max=(num_examples,num_r)  
             A=(num_m,num_r)
-            Y,Y_min,Y_max=(num_r,num_examples)  
-            p=(num_r,num_examples)
-            Q=(num_r,num_r)
             G=(2*num_r,num_r)
-            h=(2*num_r,num_examples)
+            h=(num_examples, 2*num_r)
+           
+            Q=(num_r,num_r)
+            p=(num_examples, num_r)
 
 
-        more info:
+
+        More info:
             y=v
             p=-c
             Q=0        
@@ -626,34 +628,44 @@ class SimpleProblem2:
             X_np = X.detach().cpu().numpy()
             Y = []
             total_time = 0
-            
-            solver = osqp.OSQP()
-            my_A = np.vstack([A, np.eye(self.ydim,self.ydim)])
-            y_max,y_min=np.split(h,2)
+            # print("X ",str(X_np.shape))
+            # print("h ",str(h.shape))
+            # print("G ",G.shape)
+            G1,G2=np.split(G,2)
+            my_A = np.vstack([A, G1])
+            y_max,y_min=np.split(h,indices_or_sections=2,axis=1)
             y_min=-y_min
-            my_X=X_np.reshape((X.shape[1], -1))
-            # print("my_X",my_X.shape)
-            # print("y_max:",y_max.shape)
-            my_l = np.vstack([my_X, y_min.T])
-            my_u = np.vstack([my_X, y_max.T])
-            # print(my_l.shape)
-            # print(my_u.shape)
-            # print(my_l[5733],my_u[5733])
-            solver.setup(P=csc_matrix(Q), q=p, A=csc_matrix(my_A), l=my_l, u=my_u, verbose=False, eps_prim_inf=tol)
-            start_time = time.time()
-            results = solver.solve()
-            end_time = time.time()
-            
+            for X_id in range(len(X_np)):
+                Xi=X_np[X_id]
+                solver = osqp.OSQP()
 
-            total_time += (end_time - start_time)
-            if results.info.status == 'solved':
-                Y.append(results.x)
-            else:
-                Y.append(np.ones(self.ydim) * np.nan)
+                # my_X=X_np.reshape((X.shape[1], -1))
+                # print("my_A",my_A.shape)
+                # print("y_max:",y_max.shape)
+                
+                my_l = np.hstack([Xi, y_min[X_id].ravel()])
+                my_u = np.hstack([Xi, y_max[X_id].ravel()])
+                # print(my_l.shape)
+                # print(my_u.shape)
+                # print(my_l[5733],my_u[5733])
+                solver.setup(P=csc_matrix(Q), q=p, A=csc_matrix(my_A), l=my_l, u=my_u, verbose=False, eps_prim_inf=tol)
+                start_time = time.time()
+                results = solver.solve()
+                end_time = time.time()
+                
+
+                total_time += (end_time - start_time)
+                if results.info.status == 'solved':
+                    Y.append(results.x)
+                    logger.success("Problem solved for sample "+str(X_id)+" in time "+str(end_time-start_time))
+                else:
+                    Y.append(np.ones(self.ydim) * np.nan)
+                    logger.warning("Problem not solved for sample "+str(X_id)+" in time "+str(end_time-start_time))
+
 
             sols = np.array(Y)
             parallel_time = total_time/len(X_np)
-            logger.success("Problem has been solved in time "+str(total_time)+", using OSQP with Y in size:"+str(sols.shape))
+            logger.success("Problem has been solved in time "+str(total_time)+",and parallel time="+str(parallel_time)+", using OSQP with Y in size:"+str(sols.shape))
 
         else:
             raise NotImplementedError
@@ -662,10 +674,11 @@ class SimpleProblem2:
 
     def calc_Y(self):
         Y = self.opt_solve(self.X,solver_type="osqp")[0]
-        # feas_mask =  ~np.isnan(Y).all(axis=0)  
-        # self._num = feas_mask.sum()
-        # self._X = self._X[feas_mask]
-        # self._Y = torch.tensor(Y[feas_mask])
+        feas_mask =  ~np.isnan(Y).all(axis=1)  
+        self._num = feas_mask.sum()
+        logger.info("Number of Feasible Samples=",self._num)
+        self._X = self._X[feas_mask]
+        self._Y = torch.tensor(Y[feas_mask])
         self._Y=torch.tensor(Y)
         return Y
 
