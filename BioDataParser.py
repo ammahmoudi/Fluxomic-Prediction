@@ -1,10 +1,21 @@
 """
-# Note: Better to change the name of this script! (to sth like BioDataParser)
-This script, provides:
+This script provides:
     1. A class for getting desired connections matrices from the Cmp_Map (GPRMapParser)
     2. A class for parsing and keeping the stoichiometric information (Stoichiometry)
 """
 import numpy as np
+
+#logging
+import datetime
+from loguru import logger
+import sys        # <!- add this line
+logger.remove()             # <- add this line
+logger.add(sys.stdout, level="TRACE")   # <- add this line
+log_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS zz}</green> | <level>{level: <8}</level> | <yellow>Line {line: >4} ({file}):</yellow> <b>{message}</b>"
+log_path=".\logs\log-"+str(datetime.datetime.now()).replace(" ","-").replace(".","-").replace(":","-")+".log"
+logger.add(log_path, level="TRACE", format=log_format, colorize=False, backtrace=True, diagnose=True)
+
+
 
 NUM_METs = 6124
 NUM_RXNs = 8593
@@ -12,6 +23,7 @@ NUM_RXNs = 8593
 
 class GPRMapParser:
     def __init__(self, gpr_data_filepath: str) -> None:
+        logger.info("Initializing GPRMapParser object from data in path: "+gpr_data_filepath)
         self.gpr_data_filepath = gpr_data_filepath
         self.gpr_data = {}
         self.genes_last_id = 0  # Should be = number_of_all_genes - 1
@@ -23,15 +35,16 @@ class GPRMapParser:
         self.find_gene_associated_reactions()
         self.g_reactions_index_map = dict(
             zip(self.gene_associated_reactions,
-                range(self.get_num_g_reactions))
+                range(self.get_num_g_reactions()))
         )
+
 
     def read_gpr_data(self) -> None:
         """
-        This method, fills the self.gpr_data dict from the file denoted by self.gpr_data_filepath.
+        This method fills the self.gpr_data dict from the file denoted by self.gpr_data_filepath.
         Finally, self.gpr_data will be like:
          {9132: {'R': 8591, 'G': [416, 1212, 418, 246]}, 9135: {'R': 8592, 'G': [1212, 418, 246, 70]}, ...}.
-        Also, three variables of self.complexes_last_id, self.reactions_last_id, and self.genes_last_id
+        Also, there are three variables of self.complexes_last_id, self.reactions_last_id, and self.genes_last_id
             are found during the filling of self.gpr_data.
         :return: -
         """
@@ -48,14 +61,18 @@ class GPRMapParser:
             self.complexes_last_id = max(self.complexes_last_id, complex_id)
             self.reactions_last_id = max(self.reactions_last_id, corresponding_reaction_id)
             self.genes_last_id = max(self.genes_last_id, max(influential_genes_ids))
+
+        logger.success("GPR data has been successfully read. Number of complexes="+str(self.complexes_last_id+1)+", Number of All Reactions="+str(self.get_num_all_reactions())+", Number of Genes="+str(self.genes_last_id+1)+".")
+
+
             
 
 
     def find_gene_associated_reactions(self) -> None:
         """
-        This method, finds the list of reactions which are associated to some genes (i.e., consisted of complexes).
-        Note: For a metabolic network with 8593 reaction, this list can be 4942 (57.5%) of all reaction,
-            which means 3651 (42.5%) of all reactions are not associated to any gene or complex.
+        This method finds the list of reactions that are associated with some genes (i.e., consisting of complexes).
+        Note: For a metabolic network with 8593 reactions, this list can be 4942 (57.5%) of all reactions,
+            which means 3651 (42.5%) are not associated with any gene or complex.
         :return: -. Filling the self.gene_associated_reactions
         """
         gene_associated_reactions = []
@@ -63,6 +80,7 @@ class GPRMapParser:
             reaction_id = complex_dict['R']
             gene_associated_reactions.append(reaction_id)
         self.gene_associated_reactions = list(set(gene_associated_reactions))
+        logger.success("Gene-Associated Reactions have been successfully found. Number of Gene-Associated Reactions="+str(self.get_num_g_reactions()))
 
     def get_num_all_reactions(self) -> int:
         """
@@ -78,7 +96,7 @@ class GPRMapParser:
 
     def make_genes_to_complexes_connection_matrix(self) -> np.ndarray:
         """
-        This method, returns the connection_matrix for the Genes to Complexes layer in our Neural Network.
+        This method returns the connection_matrix for the Genes to Complexes layer in our Neural Network.
         :return: genes_to_complexes_connection_matrix, the np.ndarray connection_matrix of the shape
             (num_complexes, num_genes)
         """
@@ -92,9 +110,9 @@ class GPRMapParser:
 
     def make_complexes_to_reactions_connection_matrix(self) -> np.ndarray:
         """
-        This method, returns the connection_matrix for the Complexes to G_Reactions layer in our Neural Network.
+        This method returns the connection_matrix for the Complexes to the G_Reactions layer in our Neural Network.
         By G_Reactions, we mean the reactions associated with some genes or complexes,
-            which are around 57.5% of all reactions, defined in self.gene_associated_reactions.
+            around 57.5% of all reactions, defined in self.gene_associated_reactions.
         :return: complexes_to_g_reactions connection_matrix, the np.ndarray connection_matrix of the shape
             (num_g_reactions, num_complexes)
         """
@@ -121,10 +139,10 @@ class Stoichiometry:
                  projection_matrix_filepath: str) -> None:
         """
         Stoichiometric Data keeper
-        :param a_matrix_filepath: Filepath to the matrix A information
-        :param b_vector_filepath: Filepath to the vector b information
-        :param lb_filepath: Filepath to the lb information
-        :param ub_filepath: Filepath to the ub information
+        :param a_matrix_filepath: file path to the matrix A information
+        :param b_vector_filepath: file path to the vector b information
+        :param lb_filepath: file path to the lb information
+        :param ub_filepath: file path to the ub information
         :param projection_matrix_filepath: Filepath to the projection_matrix.npy
         """
         self.a_matrix_filepath = a_matrix_filepath
@@ -143,7 +161,7 @@ class Stoichiometry:
 
     def parse_a_weights(self) -> None:
         """
-        This method, reads matrix A from self.a_matrix_filepath, and fills the self.a_weights
+        This method reads matrix A from self.a_matrix_filepath, and fills the self.a_weights
         :return: -
         """
         with open(self.a_matrix_filepath, 'r') as f:
@@ -158,7 +176,7 @@ class Stoichiometry:
 
     def parse_b_vector(self):
         """
-        This method, reads vector b from self.b_vector_filepath, and fills the self.b_weights
+        This method reads vector b from self.b_vector_filepath, and fills the self.b_weights
         :return: -
         """
         b_weights = []
@@ -171,7 +189,7 @@ class Stoichiometry:
 
     def parse_lb(self):
         """
-        This method, reads ub from self.lb_filepath, and fills the self lb
+        This method reads ub from self.lb_filepath, and fills the self lb
         :return: -
         """
         lb = []
@@ -184,7 +202,7 @@ class Stoichiometry:
 
     def parse_ub(self):
         """
-        This method, reads ub from self.ub_filepath, and fills the self.ub
+        This method reads ub from self.ub_filepath, and fills the self.ub
         :return: -
         """
         ub = []
