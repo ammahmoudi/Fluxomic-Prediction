@@ -657,7 +657,7 @@ class T2FProblem:
                 total_time += (end_time - start_time)
                 if results.info.status == 'solved':
                     Y.append(results.x)
-                    logger.success("Problem solved for sample "+str(X_id)+" in time "+str(end_time-start_time))
+                    logger.trace("Problem solved for sample "+str(X_id)+" in time "+str(end_time-start_time))
                 else:
                     Y.append(np.ones(self.ydim) * np.nan)
                     logger.warning("Problem not solved for sample "+str(X_id)+" in time "+str(end_time-start_time))
