@@ -54,7 +54,7 @@ def my_hash(string):
 
 
 
-class T2FProblem:
+class T2FProblem_OLD:
     """ 
         minimize y
         s.t.        AY=X
@@ -364,7 +364,7 @@ class T2FProblem:
 # SIMPLE PROBLEM
 ###################################################################
 
-class SimpleProblem2:
+class T2FProblem:
     """ 
      minimize_y 1/2 * y^T Q y + p^Ty
         s.t.       Ay =  x
