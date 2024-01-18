@@ -21,6 +21,10 @@ class GPRMapParser:
         # ###################################
         self.gene_associated_reactions = None
         self.find_gene_associated_reactions()
+        self.g_reactions_index_map = dict(
+            zip(self.gene_associated_reactions,
+                range(self.get_num_g_reactions))
+        )
 
     def read_gpr_data(self) -> None:
         """
@@ -44,6 +48,8 @@ class GPRMapParser:
             self.complexes_last_id = max(self.complexes_last_id, complex_id)
             self.reactions_last_id = max(self.reactions_last_id, corresponding_reaction_id)
             self.genes_last_id = max(self.genes_last_id, max(influential_genes_ids))
+            
+
 
     def find_gene_associated_reactions(self) -> None:
         """
