@@ -1,4 +1,3 @@
-
 from BioDataParser import GPRMapParser
 from BioNNDatasets import CustomTranscriptomicsDataset
 import torch
@@ -30,11 +29,11 @@ class Preprocessor:
         self.number_of_samples=self.df.shape[0]
         self.data_statistics=self.df.describe(percentiles=[0.25, 0.5, 0.75, 0.9]).to_numpy()
         self.active_genes={}
-        self.active_genes['local']=self.apply_tresholding("local",2,False)
-        self.active_genes['global']=self.apply_tresholding("global",2,False)
-        self.active_genes['local_2state']=self.apply_tresholding("local",2,True)
-        self.active_genes['local_3state']=self.apply_tresholding("local",3,True)
-        self.active_genes['global_2state']=self.apply_tresholding("global",2,True)
+        self.active_genes['local']=self.apply_thresholding("local",2,False)
+        self.active_genes['global']=self.apply_thresholding("global",2,False)
+        self.active_genes['local_2state']=self.apply_thresholding("local",2,True)
+        self.active_genes['local_3state']=self.apply_thresholding("local",3,True)
+        self.active_genes['global_2state']=self.apply_thresholding("global",2,True)
 
 
         self.active_genes_local=self.active_genes['local']
@@ -50,8 +49,8 @@ class Preprocessor:
             self.active_complexes[mode]=self.active_genes_to_complexes(active_genes)
         
 
-        self.active_ractions={}
-        self.active_g_ractions={}
+        self.active_reactions={}
+        self.active_g_reactions={}
 
         for mode, active_complexes in self.active_complexes.items():
             self.active_reactions[mode]=self.active_complexes_to_reactions(active_complexes)
@@ -61,7 +60,7 @@ class Preprocessor:
     
     def torch_dataset_to_pandas_dataframe(self, data:Dataset,fraction:float)-> pd.DataFrame:
         """
-        This method converts torch custom dataset to a pandas data frame
+        This method converts the torch custom dataset to a pandas data frame
         :param data: A Dataset object
         :return: pandas DataFrame object
         """
@@ -73,45 +72,45 @@ class Preprocessor:
         return df[:int(fraction*len(df))]
     
 
-    def calculate_tresholds(self, approach="global",use_boundaries=True, number_of_states=2)->np.ndarray:
+    def calculate_thresholds(self, approach="global",use_boundaries=True, number_of_states=2)->np.ndarray:
         """
         This method calculates thresholds based on the given config
         :param approach: "global" or "local," use_bounaries: consider upper and lower bounds for thresholds, number_of_states: 2 or 3
         :return: a ndarray of thresholds
         """
-        gene_tresholds=np.zeros((self.number_of_features, 3))
+        gene_thresholds=np.zeros((self.number_of_features, 3))
         global_percentiles=[np.percentile(self.df.to_numpy(),q) for q in [25, 50, 75, 90]]
         # print(self.df.dtypes)
         # global_percentiles=np.percentile(self.df.to_numpy(),50)
 
         
-        logger.trace("calculationg global percentiles: "+str(global_percentiles))
+        logger.trace("Calculationg global percentiles: "+str(global_percentiles))
 
         if approach=="local":
-            logger.trace("assigning local thresholds in gene_tresholds array with shape= "+str(gene_tresholds.shape))
+            logger.trace("Assigning local thresholds in gene_thresholds array with shape= "+str(gene_thresholds.shape))
             
-            gene_tresholds[:,0]=global_percentiles[0]
-            gene_tresholds[:,1]=self.data_statistics[1]
-            gene_tresholds[:2]=global_percentiles[2]
-            logger.trace("gene tresholds before applying boundaries have "+str(np.isnan(gene_tresholds[:,0]).sum())+" NaN Values.")
+            gene_thresholds[:,0]=global_percentiles[0]
+            gene_thresholds[:,1]=self.data_statistics[1]
+            gene_thresholds[:2]=global_percentiles[2]
+            logger.trace("Gene thresholds before applying boundaries have "+str(np.isnan(gene_thresholds[:,0]).sum())+" NaN values.")
 
         elif approach=="global":
-            gene_tresholds[:,1]=global_percentiles[1]
+            gene_thresholds[:,1]=global_percentiles[1]
 
         else :
             raise NotImplementedError
         if(use_boundaries):
             
-            gene_tresholds[:,0]=np.maximum(gene_tresholds[:,0],global_percentiles[0])
-            logger.trace("gene tresholds after applying lower boundaries have "+str(np.isnan(gene_tresholds[:,0]).sum())+" NaN Values.")
+            gene_thresholds[:,0]=np.maximum(gene_thresholds[:,0],global_percentiles[0])
+            logger.trace("Gene thresholds after applying lower boundaries have "+str(np.isnan(gene_thresholds[:,0]).sum())+" NaN values.")
             if number_of_states==3:
-                gene_tresholds[:,0]=np.minimum(gene_tresholds[:,0],global_percentiles[2])
-                logger.trace("gene tresholds after applying upper boundaries have "+str(np.isnan(gene_tresholds[:,0]).sum())+" NaN Values.")
+                gene_thresholds[:,0]=np.minimum(gene_thresholds[:,0],global_percentiles[2])
+                logger.trace("Gene thresholds after applying upper boundaries have "+str(np.isnan(gene_thresholds[:,0]).sum())+" NaN values.")
 
             elif number_of_states!=2:
                 raise NotImplementedError
         
-        return gene_tresholds[:,0]
+        return gene_thresholds[:,0]
     
     def compare_with_threshold(row, threshold):
         """
@@ -122,21 +121,21 @@ class Preprocessor:
         return row > threshold
 
 
-    def apply_tresholding(self, approach="global", number_of_states=2,use_boundaries=True)->pd.DataFrame:
+    def apply_thresholding(self, approach="global", number_of_states=2,use_boundaries=True)->pd.DataFrame:
         """
-        This method calculates thresholds based on the given config and applies it to the dataset and returns the result data frame
+        This method calculates thresholds based on the given config, applies it to the dataset, and returns the result data frame
         :param approach: "global" or "local," use_bounaries: consider upper and lower bounds for thresholds, number_of_states: 2 or 3
         :return: a pandas data frame of active genes.
         """
-        gene_tresholds=self.calculate_tresholds(approach=approach,number_of_states=number_of_states, use_boundaries=use_boundaries)
-        logger.trace(" gene_tresholds is calcualted in the array with shape= "+str(gene_tresholds.shape))
+        gene_thresholds=self.calculate_thresholds(approach=approach,number_of_states=number_of_states, use_boundaries=use_boundaries)
+        logger.trace("Gene thresholds is calcualted in the array with shape= "+str(gene_thresholds.shape))
         logger.trace("df has "+str(self.df.isna().sum().sum())+" NaN Values.")
         active_genes=self.df.copy()
         
-        active_genes=active_genes.apply(lambda row: row>gene_tresholds,axis=1)
+        active_genes=active_genes.apply(lambda row: row>gene_thresholds,axis=1)
 
-        logger.trace("active genes have "+str(active_genes.isna().sum().sum())+" NaN Values.")
-        logger.success("active genes have been calculated with "+approach+" aproach and "+str(number_of_states)+" states "+("with considering bounds" if(use_boundaries) else "")+" in a dataframe with shape " +str(active_genes.shape))
+        logger.trace("Active genes have "+str(active_genes.isna().sum().sum())+" NaN Values.")
+        logger.success("Active genes have been calculated with "+approach+" aproach and "+str(number_of_states)+" states "+("with considering bounds" if(use_boundaries) else "")+" in a dataframe with shape " +str(active_genes.shape))
         
         return active_genes
     
@@ -171,7 +170,7 @@ class Preprocessor:
                 active_complexes[sample_id, complex_id]=np.all(sample_complex_genes)
 
 
-        logger.success("active complexes have been calculated with shape " +str(active_complexes.shape))
+        logger.success("Active complexes have been calculated with shape " +str(active_complexes.shape))
 
         return active_complexes
     
@@ -197,7 +196,7 @@ class Preprocessor:
                 
                 genes=complex_dict['G']
                 if(sample[complex_id]==1):active_reactions[sample_id][reaction_id]=active_reactions[sample_id][reaction_id]+1
-        logger.success("active reactions have been calculated"+("for only gene associated reactions " if(only_associated_reactions) else "")+" with shape " +str(active_reactions.shape))
+        logger.success("Active reactions have been calculated "+("for only gene associated reactions" if(only_associated_reactions) else "")+" with shape " +str(active_reactions.shape))
         return active_reactions
 
 
@@ -213,11 +212,11 @@ def main():
         p=Preprocessor(gpr_info=gpr_info,number_of_features=1713,data=normal_dataset)
         p.save_to_file("./Data")
         # p.active_genes_to_reactions(p.active_genes_local_3state)
-        # active_genes_local_3state=p.apply_tresholding("local",3,True)
-        # active_genes_local_2state=p.apply_tresholding("local",2,True)
-        # active_genes_global_2state=p.apply_tresholding("global",2,True)
-        # active_genes_local=p.apply_tresholding("local",2,False)
-        # active_genes_global=p.apply_tresholding("global",2,False)
+        # active_genes_local_3state=p.apply_thresholding("local",3,True)
+        # active_genes_local_2state=p.apply_thresholding("local",2,True)
+        # active_genes_global_2state=p.apply_thresholding("global",2,True)
+        # active_genes_local=p.apply_thresholding("local",2,False)
+        # active_genes_global=p.apply_thresholding("global",2,False)
         # print(active_genes_global_2state)
         
 
