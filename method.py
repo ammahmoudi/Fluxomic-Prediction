@@ -28,7 +28,7 @@ from loguru import logger
 import datetime
 import sys        # <!- add this line
 logger.remove()             # <- add this line
-logger.add(sys.stdout, level="TRACE")   # <- add this line
+logger.add(sys.stdout, level="INFO")   # <- add this line
 log_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS zz}</green> | <level>{level: <8}</level> | <yellow>Line {line: >4} ({file}):</yellow> <b>{message}</b>"
 log_path=".\logs\log-"+str(datetime.datetime.now()).replace(" ","-").replace(".","-").replace(":","-")+".log"
 logger.add(log_path, level="TRACE", format=log_format, colorize=False, backtrace=True, diagnose=True)
@@ -40,8 +40,11 @@ def main():
     parser = argparse.ArgumentParser(description='DC3')
     parser.add_argument('--probType', type=str, default='T2F',
         choices=['simple', 'nonconvex', 'acopf57','T2F'], help='problem type')
+    parser.add_argument('--mode', type=str, default='local_3state',
+        choices=['local', 'global', 'local_2state','local_3state','global_2state'], help='problem type')
     parser.add_argument('--simpleVar', type=int, 
         help='number of decision vars for simple problem')
+    
     parser.add_argument('--simpleIneq', type=int,
         help='number of inequality constraints for simple problem')
     parser.add_argument('--simpleEq', type=int,
@@ -104,8 +107,8 @@ def main():
     # Load data, and put on GPU if needed
     prob_type = args['probType']
     if prob_type == 'T2F':
-        filepath = os.path.join('datasets', 'T2F', "recon2.2_dataset_var{}_ineq{}_eq{}_ex{}".format(
-            args['simpleVar'], args['simpleIneq'], args['simpleEq'], args['simpleEx']))
+        filepath = os.path.join('datasets', 'T2F', "recon2.2_{}_dataset_var(R){}_ineq(2R){}_eq(M){}_ex(Samples){}".format(
+            args['mode'], args['simpleVar'], args['simpleIneq'], args['simpleEq'], args['simpleEx']))
     elif prob_type == 'simple':
         filepath = os.path.join('datasets', 'simple', "random_simple_dataset_var{}_ineq{}_eq{}_ex{}".format(
             args['simpleVar'], args['simpleIneq'], args['simpleEq'], args['simpleEx']))
@@ -151,11 +154,13 @@ def train_net(data, args, save_dir):
     train_dataset = TensorDataset(data.trainX)
     valid_dataset = TensorDataset(data.validX)
     test_dataset = TensorDataset(data.testX)
-    print(len(train_dataset))
+    
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False)
     valid_loader = DataLoader(valid_dataset, batch_size=len(valid_dataset))
     test_loader = DataLoader(test_dataset, batch_size=len(test_dataset))
+    # logger.trace("valid loader with shape="+str(valid_dataset.))
+    
 
     solver_net = NNSolver(data, args)
     solver_net.to(DEVICE)
@@ -167,32 +172,55 @@ def train_net(data, args, save_dir):
 
         # Get valid loss
         solver_net.eval()
+        valid_stats=None
         for Xvalid in valid_loader:
+           
             Xvalid = Xvalid[0].to(DEVICE)
-            eval_net(data, Xvalid, solver_net, args, 'valid', epoch_stats)
+            logger.trace("Xvalid with shape="+str(Xvalid.shape))
+            valid_stats=eval_net(data, Xvalid, solver_net, args, 'valid', epoch_stats)
+        # logger.info(valid_stats)
 
+        test_stats=None
         # Get test loss
         solver_net.eval()
         for Xtest in test_loader:
             Xtest = Xtest[0].to(DEVICE)
             eval_net(data, Xtest, solver_net, args, 'test', epoch_stats)
 
+        # logger.info(test_stats)
+
         # Get train loss
         solver_net.train()
+        results_Yhat={}
+        results_Ynew={}
         for Xtrain in train_loader:
             Xtrain = Xtrain[0].to(DEVICE)
             start_time = time.time()
             solver_opt.zero_grad()
             Yhat_train = solver_net(Xtrain)
-            Ynew_train = grad_steps(data, Xtrain, Yhat_train, args)
-            train_loss = total_loss(data, Xtrain, Ynew_train, args)
+            Ynew_train = grad_steps(data, Xtrain, Yhat_train, args,mode="train")
+            train_loss = total_loss(data, Xtrain, Ynew_train, args,mode="train")
+            # print("train loss=",train_loss)
+
+            # import pandas as pd
+            # print(pd.DataFrame(train_loss.detach().cpu().numpy()).describe())
+
+   
+            # print(pd.DataFrame(Yhat_train.detach().cpu().numpy()).describe())
+            # print(Ynew_train.numpy().count_nonzero())
+            if (i % args['resultsSaveFreq'] == 0):
+                id='train_'+str(i)+'_Yhat'
+                results_Yhat[id]=Yhat_train
+                id='train_'+str(i)+'_Ynew'
+                results_Ynew[id]=Ynew_train
+
             train_loss.sum().backward()
             solver_opt.step()
             train_time = time.time() - start_time
             dict_agg(epoch_stats, 'train_loss', train_loss.detach().cpu().numpy())
             dict_agg(epoch_stats, 'train_time', train_time, op='sum')
         logger.info(
-            'Epoch {}: train loss {:.4f}, eval {:.4f}, dist {:.4f}, ineq max {:.4f}, ineq mean {:.4f}, ineq num viol {:.4f}, eq max {:.4f}, steps {}, time {:.4f}'.format(
+            'Epoch {}: train loss {}, eval {}, dist {}, ineq max {}, ineq mean {}, ineq num viol {}, eq max {}, steps {}, time {}'.format(
                 i, np.mean(epoch_stats['train_loss']), np.mean(epoch_stats['valid_eval']),
                 np.mean(epoch_stats['valid_dist']), np.mean(epoch_stats['valid_ineq_max']),
                 np.mean(epoch_stats['valid_ineq_mean']), np.mean(epoch_stats['valid_ineq_num_viol_0']),
@@ -219,12 +247,18 @@ def train_net(data, args, save_dir):
                 pickle.dump(stats, f)
             with open(os.path.join(save_dir, 'solver_net.dict'), 'wb') as f:
                 torch.save(solver_net.state_dict(), f)
+
             
 
     with open(os.path.join(save_dir, 'stats.dict'), 'wb') as f:
         pickle.dump(stats, f)
     with open(os.path.join(save_dir, 'solver_net.dict'), 'wb') as f:
         torch.save(solver_net.state_dict(), f)
+
+    with open(os.path.join(save_dir, 'results_Yhat.dict'), 'wb') as f:
+        pickle.dump(results_Yhat, f)
+    with open(os.path.join(save_dir, 'results_Ynew.dict'), 'wb') as f:
+        pickle.dump(results_Ynew, f)
     return solver_net, stats
 
 # Modifies stats in place
@@ -248,25 +282,25 @@ def eval_net(data, X, solver_net, args, prefix, stats):
     Y = solver_net(X)
     base_end_time = time.time()
 
-    Ycorr, steps = grad_steps_all(data, X, Y, args)
+    Ycorr, steps = grad_steps_all(data, X, Y, args, prefix)
     end_time = time.time()
 
-    Ynew = grad_steps(data, X, Y, args)
+    Ynew = grad_steps(data, X, Y, args, prefix)
     raw_end_time = time.time()
 
     dict_agg(stats, make_prefix('time'), end_time - start_time, op='sum')
     dict_agg(stats, make_prefix('steps'), np.array([steps]))
-    dict_agg(stats, make_prefix('loss'), total_loss(data, X, Ynew, args).detach().cpu().numpy())
+    dict_agg(stats, make_prefix('loss'), total_loss(data, X, Ynew, args,mode=prefix).detach().cpu().numpy())
     dict_agg(stats, make_prefix('eval'), data.obj_fn(Ycorr).detach().cpu().numpy())
     dict_agg(stats, make_prefix('dist'), torch.norm(Ycorr - Y, dim=1).detach().cpu().numpy())
-    dict_agg(stats, make_prefix('ineq_max'), torch.max(data.ineq_dist(X, Ycorr), dim=1)[0].detach().cpu().numpy())
-    dict_agg(stats, make_prefix('ineq_mean'), torch.mean(data.ineq_dist(X, Ycorr), dim=1).detach().cpu().numpy())
+    dict_agg(stats, make_prefix('ineq_max'), torch.max(data.ineq_dist(X, Ycorr, prefix), dim=1)[0].detach().cpu().numpy())
+    dict_agg(stats, make_prefix('ineq_mean'), torch.mean(data.ineq_dist(X, Ycorr, prefix), dim=1).detach().cpu().numpy())
     dict_agg(stats, make_prefix('ineq_num_viol_0'),
-             torch.sum(data.ineq_dist(X, Ycorr) > eps_converge, dim=1).detach().cpu().numpy())
+             torch.sum(data.ineq_dist(X, Ycorr, prefix) > eps_converge, dim=1).detach().cpu().numpy())
     dict_agg(stats, make_prefix('ineq_num_viol_1'),
-             torch.sum(data.ineq_dist(X, Ycorr) > 10 * eps_converge, dim=1).detach().cpu().numpy())
+             torch.sum(data.ineq_dist(X, Ycorr, prefix) > 10 * eps_converge, dim=1).detach().cpu().numpy())
     dict_agg(stats, make_prefix('ineq_num_viol_2'),
-             torch.sum(data.ineq_dist(X, Ycorr) > 100 * eps_converge, dim=1).detach().cpu().numpy())
+             torch.sum(data.ineq_dist(X, Ycorr, prefix) > 100 * eps_converge, dim=1).detach().cpu().numpy())
     dict_agg(stats, make_prefix('eq_max'),
              torch.max(torch.abs(data.eq_resid(X, Ycorr)), dim=1)[0].detach().cpu().numpy())
     dict_agg(stats, make_prefix('eq_mean'), torch.mean(torch.abs(data.eq_resid(X, Ycorr)), dim=1).detach().cpu().numpy())
@@ -278,14 +312,14 @@ def eval_net(data, X, solver_net, args, prefix, stats):
              torch.sum(torch.abs(data.eq_resid(X, Ycorr)) > 100 * eps_converge, dim=1).detach().cpu().numpy())
     dict_agg(stats, make_prefix('raw_time'), (raw_end_time-end_time) + (base_end_time-start_time), op='sum')
     dict_agg(stats, make_prefix('raw_eval'), data.obj_fn(Ynew).detach().cpu().numpy())
-    dict_agg(stats, make_prefix('raw_ineq_max'), torch.max(data.ineq_dist(X, Ynew), dim=1)[0].detach().cpu().numpy())
-    dict_agg(stats, make_prefix('raw_ineq_mean'), torch.mean(data.ineq_dist(X, Ynew), dim=1).detach().cpu().numpy())
+    dict_agg(stats, make_prefix('raw_ineq_max'), torch.max(data.ineq_dist(X, Ynew, prefix), dim=1)[0].detach().cpu().numpy())
+    dict_agg(stats, make_prefix('raw_ineq_mean'), torch.mean(data.ineq_dist(X, Ynew, prefix), dim=1).detach().cpu().numpy())
     dict_agg(stats, make_prefix('raw_ineq_num_viol_0'),
-             torch.sum(data.ineq_dist(X, Ynew) > eps_converge, dim=1).detach().cpu().numpy())
+             torch.sum(data.ineq_dist(X, Ynew, prefix) > eps_converge, dim=1).detach().cpu().numpy())
     dict_agg(stats, make_prefix('raw_ineq_num_viol_1'),
-             torch.sum(data.ineq_dist(X, Ynew) > 10 * eps_converge, dim=1).detach().cpu().numpy())
+             torch.sum(data.ineq_dist(X, Ynew, prefix) > 10 * eps_converge, dim=1).detach().cpu().numpy())
     dict_agg(stats, make_prefix('raw_ineq_num_viol_2'),
-             torch.sum(data.ineq_dist(X, Ynew) > 100 * eps_converge, dim=1).detach().cpu().numpy())
+             torch.sum(data.ineq_dist(X, Ynew, prefix) > 100 * eps_converge, dim=1).detach().cpu().numpy())
     dict_agg(stats, make_prefix('raw_eq_max'),
              torch.max(torch.abs(data.eq_resid(X, Ynew)), dim=1)[0].detach().cpu().numpy())
     dict_agg(stats, make_prefix('raw_eq_mean'),
@@ -298,15 +332,15 @@ def eval_net(data, X, solver_net, args, prefix, stats):
              torch.sum(torch.abs(data.eq_resid(X, Ynew)) > 100 * eps_converge, dim=1).detach().cpu().numpy())
     return stats
 
-def total_loss(data, X, Y, args):
+def total_loss(data, X, Y, args, mode):
     obj_cost = data.obj_fn(Y)
-    ineq_dist = data.ineq_dist(X, Y)
+    ineq_dist = data.ineq_dist(X, Y, mode)
     ineq_cost = torch.norm(ineq_dist, dim=1)
     eq_cost = torch.norm(data.eq_resid(X, Y), dim=1)
     return obj_cost + args['softWeight'] * (1 - args['softWeightEqFrac']) * ineq_cost + \
             args['softWeight'] * args['softWeightEqFrac'] * eq_cost
 
-def grad_steps(data, X, Y, args):
+def grad_steps(data, X, Y, args, mode="full"):
     take_grad_steps = args['useTrainCorr']
     if take_grad_steps:
         lr = args['corrLr']
@@ -320,9 +354,9 @@ def grad_steps(data, X, Y, args):
         old_Y_step = 0
         for i in range(num_steps):
             if partial_corr:
-                Y_step = data.ineq_partial_grad(X, Y_new)
+                Y_step = data.ineq_partial_grad(X, Y_new, mode)
             else:
-                ineq_step = data.ineq_grad(X, Y_new)
+                ineq_step = data.ineq_grad(X, Y_new, mode)
                 eq_step = data.eq_grad(X, Y_new)
                 Y_step = (1 - args['softWeightEqFrac']) * ineq_step + args['softWeightEqFrac'] * eq_step
             
@@ -336,7 +370,7 @@ def grad_steps(data, X, Y, args):
         return Y
 
 # Used only at test time, so let PyTorch avoid building the computational graph
-def grad_steps_all(data, X, Y, args):
+def grad_steps_all(data, X, Y, args, mode):
     take_grad_steps = args['useTestCorr']
     if take_grad_steps:
         lr = args['corrLr']
@@ -354,11 +388,11 @@ def grad_steps_all(data, X, Y, args):
         old_eq_step = 0
         with torch.no_grad():
             while (i == 0 or torch.max(torch.abs(data.eq_resid(X, Y_new))) > eps_converge or
-                           torch.max(data.ineq_dist(X, Y_new)) > eps_converge) and i < max_steps:
+                           torch.max(data.ineq_dist(X, Y_new, mode)) > eps_converge) and i < max_steps:
                 if partial_corr:
-                    Y_step = data.ineq_partial_grad(X, Y_new)
+                    Y_step = data.ineq_partial_grad(X, Y_new, mode)
                 else:
-                    ineq_step = data.ineq_grad(X, Y_new)
+                    ineq_step = data.ineq_grad(X, Y_new, mode)
                     eq_step = data.eq_grad(X, Y_new)
                     Y_step = (1 - args['softWeightEqFrac']) * ineq_step + args['softWeightEqFrac'] * eq_step
                 
