@@ -232,7 +232,17 @@ class T2FProblem:
     @property
     def train_frac(self):
         return 1 - self.valid_frac - self.test_frac
+    @property
+    def trainH(self):
+        return self.h[:int(self.num*self.train_frac)]
 
+    @property
+    def validH(self):
+        return self.h[int(self.num*self.train_frac):int(self.num*(self.train_frac + self.valid_frac))]
+
+    @property
+    def testH(self):
+        return self.h[int(self.num*(self.train_frac + self.valid_frac)):]
     @property
     def trainX(self):
         return self.X[:int(self.num*self.train_frac)]
@@ -256,35 +266,51 @@ class T2FProblem:
     @property
     def testY(self):
         return self.Y[int(self.num*(self.train_frac + self.valid_frac)):]
-
+    
     @property
     def device(self):
         return self._device
-
+    
     def obj_fn(self, Y):
         return (0.5*(Y@self.Q)*Y + self.p*Y).sum(dim=1)
 
     def eq_resid(self, X, Y):
         return X - Y@self.A.T
+    
+    def get_h_by_indices(self, indices):
+        return self.h[indices]
 
-    def ineq_resid(self, X, Y):
-        return Y@self.G.T - self.h
+    def ineq_resid(self, X, Y,mode="full"):
+        if mode=="test":h=self.testH
+        elif mode=='valid':h=self.validH
+        elif mode=='train':h=self.trainH
+        else: h=self.h
+        return Y@self.G.T - h
 
-    def ineq_dist(self, X, Y):
-        resids = self.ineq_resid(X, Y)
+    def ineq_dist(self, X, Y,mode="full"):
+        resids = self.ineq_resid(X, Y,mode=mode)
         return torch.clamp(resids, 0)
 
     def eq_grad(self, X, Y):
         return 2*(Y@self.A.T - X)@self.A
 
-    def ineq_grad(self, X, Y):
-        ineq_dist = self.ineq_dist(X, Y)
+    def ineq_grad(self, X, Y, mode="full"):
+        ineq_dist = self.ineq_dist(X, Y, mode=mode)
         return 2*ineq_dist@self.G
 
-    def ineq_partial_grad(self, X, Y):
+    def ineq_partial_grad(self, X, Y, mode="full"):
+        if mode=="test":h=self.testH
+        elif mode=='valid':h=self.validH
+        elif mode=='train':h=self.trainH
+        else: h=self.h
+        logger.trace("calculating G effective with G_partial="+str(self.G[:, self.partial_vars].shape)+", G_others="+str(self.G[:, self.other_vars].shape)+", A_other_inv="+str(self._A_other_inv.shape)+", A_partial="+str(self._A_partial.shape))
         G_effective = self.G[:, self.partial_vars] - self.G[:, self.other_vars] @ (self._A_other_inv @ self._A_partial)
-        logger.trace("calculating h effective with h="+str(self.h.shape)+", X="+str(X.shape)+", A_other_inv="+str(self._A_other_inv.shape)+", G_others="+str(self.G[:, self.other_vars].shape))
-        h_effective = self.h - (X @ self._A_other_inv.T) @ self.G[:, self.other_vars].T
+        logger.trace('G_effective with shape='+str(G_effective.shape))
+        # print(G_effective)
+        logger.trace("calculating h effective with h="+str(h.shape)+", X="+str(X.shape)+", A_other_inv="+str(self._A_other_inv.shape)+", G_others="+str(self.G[:, self.other_vars].shape))
+        hx=(X @ self._A_other_inv.T) @ self.G[:, self.other_vars].T
+        logger.trace('hx with shape='+str(hx.shape))
+        h_effective = h - hx
         grad = 2 * torch.clamp(Y[:, self.partial_vars] @ G_effective.T - h_effective, 0) @ G_effective
         Y = torch.zeros(X.shape[0], self.ydim, device=self.device)
         Y[:, self.partial_vars] = grad
@@ -297,12 +323,18 @@ class T2FProblem:
 
     # Solves for the full set of variables
     def complete_partial(self, X, Z):
+        
         Y = torch.zeros(X.shape[0], self.ydim, device=self.device)
+        logger.info('caluclating complete partial with Y='+str(Y.shape)+", Z="+str(Z.shape)+", A_partial="+str(self._A_partial.shape)+"A_other_inv="+str(self._A_other_inv.shape))
+        logger.info('partial_vars='+str(self.partial_vars.shape)+", other_vars="+str(self.other_vars.shape))
         Y[:, self.partial_vars] = Z
         Y[:, self.other_vars] = (X - Z @ self._A_partial.T) @ self._A_other_inv.T
+        import pandas as pd
+        print("partial")
+        print(pd.DataFrame(Y.detach().cpu().numpy()).describe())
         return Y
 
-    def opt_solve(self, X, solver_type='osqp', tol=1e-4):
+    def opt_solve(self, X, solver_type='osqp', tol=1e-4,mode="full"):
 
         if solver_type == 'qpth':
             logger.trace('running qpth')
@@ -316,8 +348,13 @@ class T2FProblem:
         
         elif solver_type == 'osqp':
             logger.trace('running osqp')
-            Q, p, A, G, h = \
-                self.Q_np, self.p_np, self.A_np, self.G_np, self.h_np
+            Q, p, A, G = \
+                self.Q_np, self.p_np, self.A_np, self.G_np
+            if mode=="test":h=self.testH
+            elif mode=='valid':h=self.validH
+            elif mode=='train':h=self.trainH
+            else: h=self.h
+            h=h.detach().cpu().numpy()
             X_np = X.detach().cpu().numpy()
             Y = []
             total_time = 0
