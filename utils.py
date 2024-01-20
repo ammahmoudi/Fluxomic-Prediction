@@ -26,6 +26,7 @@ import time
 
 #logging
 from loguru import logger
+import pickle
 import datetime
 
 # import sys        # <!- add this line
@@ -109,9 +110,17 @@ class T2FProblem:
         i = 0
         # print(self._ydim)
         # print(self._neq)
+        good_columns="good-column-5733-2023-12-22-01-05-10-456617"
+        with open(good_columns, "rb") as fp:   #Pickling
+            columns = pickle.load(fp)
         while abs(det) < 0.0001 and i < 1000:
-            self._partial_vars = np.random.choice(self._ydim, self._ydim - self._neq, replace=False)
-            self._other_vars = np.setdiff1d( np.arange(self._ydim), self._partial_vars)
+            # self._partial_vars = np.random.choice(self._ydim, self._ydim - self._neq, replace=False)
+            # self._other_vars = np.setdiff1d( np.arange(self._ydim), self._partial_vars)
+            # print(good_columns)
+            # good_columns=np.nd
+            self._other_vars=columns
+            self._partial_vars = np.setdiff1d( np.arange(self._ydim), self._other_vars)
+
             det = torch.det(self._A[:, self._other_vars])
             logger.info("det of iteration "+str(i)+" is: "+str(det))
             i += 1
@@ -125,7 +134,7 @@ class T2FProblem:
         self._device = None
 
     def __str__(self):
-        return 'SimpleProblem2-{}-{}-{}-{}'.format(
+        return 'T2FProblem-{}-{}-{}-{}'.format(
             str(self.ydim), str(self.nineq), str(self.neq), str(self.num)
         )
 
@@ -325,13 +334,13 @@ class T2FProblem:
     def complete_partial(self, X, Z):
         
         Y = torch.zeros(X.shape[0], self.ydim, device=self.device)
-        logger.info('caluclating complete partial with Y='+str(Y.shape)+", Z="+str(Z.shape)+", A_partial="+str(self._A_partial.shape)+"A_other_inv="+str(self._A_other_inv.shape))
-        logger.info('partial_vars='+str(self.partial_vars.shape)+", other_vars="+str(self.other_vars.shape))
+        logger.trace('caluclating complete partial with Y='+str(Y.shape)+", Z="+str(Z.shape)+", A_partial="+str(self._A_partial.shape)+"A_other_inv="+str(self._A_other_inv.shape))
+        logger.trace('partial_vars='+str(len(self.partial_vars))+", other_vars="+str(len(self.other_vars)))
         Y[:, self.partial_vars] = Z
         Y[:, self.other_vars] = (X - Z @ self._A_partial.T) @ self._A_other_inv.T
-        import pandas as pd
-        print("partial")
-        print(pd.DataFrame(Y.detach().cpu().numpy()).describe())
+        # import pandas as pd
+        # print("partial")
+        # print(pd.DataFrame(Y.detach().cpu().numpy()).describe())
         return Y
 
     def opt_solve(self, X, solver_type='osqp', tol=1e-4,mode="full"):
@@ -406,9 +415,12 @@ class T2FProblem:
         Y = self.opt_solve(self.X,solver_type="osqp")[0]
         feas_mask =  ~np.isnan(Y).all(axis=1)  
         self._num = feas_mask.sum()
-        logger.info("Number of Feasible Samples=",self._num)
+        
+        logger.info("Number of Feasible Samples="+str(self._num))
         self._X = self._X[feas_mask]
         self._Y = torch.tensor(Y[feas_mask])
+        self._h = torch.tensor(self._h[feas_mask])
         self._Y=torch.tensor(Y)
+
         return Y
 
