@@ -167,6 +167,8 @@ def train_net(data, args, save_dir):
     solver_opt = optim.Adam(solver_net.parameters(), lr=solver_step)
 
     stats = {}
+    results_Yhat={}
+    results_Ynew={}
     for i in range(nepochs):
         epoch_stats = {}
 
@@ -191,8 +193,7 @@ def train_net(data, args, save_dir):
 
         # Get train loss
         solver_net.train()
-        results_Yhat={}
-        results_Ynew={}
+
         for Xtrain in train_loader:
             Xtrain = Xtrain[0].to(DEVICE)
             start_time = time.time()
@@ -438,6 +439,7 @@ class NNSolver(nn.Module):
         if self._args['useCompl']:
             if 'acopf' in self._args['probType']:
                 out = nn.Sigmoid()(out)   # used to interpolate between max and min values
+
             return self._data.complete_partial(x, out)
         else:
             return self._data.process_output(x, out)
