@@ -17,7 +17,7 @@ import datetime
 from loguru import logger
 import sys        # <!- add this line
 logger.remove()             # <- add this line
-logger.add(sys.stdout, level="INFO")   # <- add this line
+logger.add(sys.stdout, level="TRACE")   # <- add this line
 log_format = "<green>{time:YYYY-MM-DD HH:mm:ss.SSS zz}</green> | <level>{level: <8}</level> | <yellow>Line {line: >4} ({file}):</yellow> <b>{message}</b>"
 log_path=".\logs\log-"+str(datetime.datetime.now()).replace(" ","-").replace(".","-").replace(":","-")+".log"
 logger.add(log_path, level="TRACE", format=log_format, colorize=False, backtrace=True, diagnose=True)
@@ -31,10 +31,10 @@ data=Stoichiometry("./Data/A.txt","./Data/b.txt","./Data/lb.txt","./Data/ub.txt"
 
 A=data.get_a_matrix()
 good_rows="good-row-5733-2023-12-22-00-59-59-904165"
-good_columns="good-column-5733-2023-12-22-01-05-10-456617"
-A=mt.make_chosen_matrix(A,good_rows,good_columns)
+# good_columns="good-column-5733-2023-12-22-01-05-10-456617"
+A=mt.make_chosen_matrix(A,good_rows,None,mode='row')
 
-mt.random_invertible_finder(A)
+# mt.random_invertible_finder(A)
 num_m,num_r=A.shape
 
 
@@ -75,12 +75,12 @@ for mode,active_reactions in preprocessor.active_reactions.items():
                     Y_boundaries[mode]['min'][reaction_id][sample_id]=0
                     Y_boundaries[mode]['max'][reaction_id][sample_id]=0
 
-    Y_boundaries[mode]['min']=mt.make_chosen_matrix(Y_boundaries[mode]['min'],good_columns,None, "row")
+    # Y_boundaries[mode]['min']=mt.make_chosen_matrix(Y_boundaries[mode]['min'],good_columns,None, "row")
 
-    logger.trace("Y_min matrix filtered by good rows (reactions) with shape="+str(Y_boundaries[mode]['min'].shape))
+    # logger.trace("Y_min matrix filtered by good rows (reactions) with shape="+str(Y_boundaries[mode]['min'].shape))
 
-    Y_boundaries[mode]['max']=mt.make_chosen_matrix(Y_boundaries[mode]['max'],good_columns,None, "row")
-    logger.trace("Y_max matrix filtered by good rows (reactions) with shape="+str(Y_boundaries[mode]['max'].shape))
+    # Y_boundaries[mode]['max']=mt.make_chosen_matrix(Y_boundaries[mode]['max'],good_columns,None, "row")
+    # logger.trace("Y_max matrix filtered by good rows (reactions) with shape="+str(Y_boundaries[mode]['max'].shape))
 
 
 logger.success("Sample reaction Boundaries changed due to active reactions data.")
@@ -98,15 +98,18 @@ num_examples = X.shape[1]
 #define p (need to review)
 p=np.ones(num_r)
 
-num_var = Y_max.shape[0]
+num_var = Y_boundaries['global']['max'].shape[0]
 num_ineq = G.shape[0]
 num_eq = A.shape[0]
 
 for mode,active_reactions in preprocessor.active_reactions.items():
-    h=np.vstack((Y_boundaries[mode]['max'], -Y_boundaries[mode]["min"]))
-    problem=T2FProblem(Q,p,A,G,h.T,X.T)
-    problem.calc_Y()
+    # if(mode=="local_3state"):
+          
+        h=np.vstack((Y_boundaries[mode]['max'], -Y_boundaries[mode]["min"]))
+        problem=T2FProblem(Q,p,A,G,h.T,X.T)
+        problem.calc_Y()
 
-    with open("./datasets/T2F/recon2.2_{}_dataset_var(R){}_ineq(2R){}_eq(M){}_ex(Samples){}".format(mode,num_var, num_ineq, num_eq, num_examples), 'wb') as f:
-        pickle.dump(problem, f)
-    logger.success("Data has been seccussfully generated and saver for "+"recon2.2_{}_dataset_var(R){}_ineq(2R){}_eq(M){}_ex(Samples){}".format(mode,num_var, num_ineq, num_eq, num_examples))
+
+        with open("./datasets/T2F/recon2.2_{}_dataset_var(R){}_ineq(2R){}_eq(M){}_ex(Samples){}".format(mode,num_var, num_ineq, num_eq, problem._num), 'wb') as f:
+            pickle.dump(problem, f)
+        logger.success("Data has been seccussfully generated and saver for "+"recon2.2_{}_dataset_var(R){}_ineq(2R){}_eq(M){}_ex(Samples){}".format(mode,num_var, num_ineq, num_eq, num_examples))
