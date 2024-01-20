@@ -420,7 +420,7 @@ class T2FProblem:
         self._X = self._X[feas_mask]
         self._Y = torch.tensor(Y[feas_mask])
         self._h = torch.tensor(self._h[feas_mask])
-        self._Y=torch.tensor(Y)
+
 
         return Y
 
