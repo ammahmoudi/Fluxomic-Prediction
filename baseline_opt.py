@@ -117,8 +117,8 @@ def main():
 def get_opt_results(data, args, Yvalid, Ytest, Yvalid_precorr=None, Ytest_precorr=None):
     eps_converge = args['corrEps']
     results = {}
-    results['Y_valid_pred']=Yvalid.detach.cpu().numpy()
-    results['Y_test_pred']=Ytest.detach.cpu().numpy()
+    results['Y_valid_pred']=Yvalid.detach().cpu().numpy()
+    results['Y_test_pred']=Ytest.detach().cpu().numpy()
     results['valid_eval'] = data.obj_fn(Yvalid).detach().cpu().numpy()
     results['valid_ineq_max'] = torch.max(data.ineq_dist(data.validX, Yvalid,mode="valid"), dim=1)[0].detach().cpu().numpy()
     results['valid_ineq_mean'] = torch.mean(data.ineq_dist(data.validX, Yvalid, mode='valid'), dim=1).detach().cpu().numpy()
