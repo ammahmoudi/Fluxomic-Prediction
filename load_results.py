@@ -30,7 +30,9 @@ def get_experiment_dirs(path_prefix):
 
     # exper_dirs['acopf'] = 'ACOPF-57-0-0.5-0.7-0.0833-0.0833'
     
-    exper_dirs['T2F'] = 'SimpleProblem2-5733-11466-5733-741'
+    exper_dirs['T2F'] = 'T2FProblem-8593-17186-5733-739'
+    exper_dirs['T2F_5733'] = 'T2FProblem-5733-11466-5733-741'
+    
 
     for key in exper_dirs.keys():
         exper_dirs[key] = os.path.join(path_prefix, exper_dirs[key])
@@ -159,7 +161,7 @@ def check_running_done(path, is_opt=False):
             if os.path.exists(os.path.join(path, 'stats.dict')):
                 with open(os.path.join(path, 'stats.dict'), 'rb') as f:
                     stats = pickle.load(f)
-                is_done = (len(stats['valid_time']) == 1000 or len(stats['valid_time'])==100 )
+                is_done = (len(stats['valid_time']) == 1000 or len(stats['valid_time'])==10 )
                 if not is_done:
                     print(len(stats['valid_time']))
         except Exception as e:
